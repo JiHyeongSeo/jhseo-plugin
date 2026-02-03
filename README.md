@@ -21,6 +21,34 @@ SOL 팀에서 사용하는 Claude Code 플러그인 모음입니다.
 /plugin install <플러그인명>@sol-plugins
 ```
 
+또는 `/plugin` 명령어로 플러그인 목록을 탐색하여 설치할 수도 있습니다.
+
+## 프로젝트에서 마켓플레이스 자동 등록
+
+프로젝트의 `.claude/settings.json`에 추가하면, 팀원들이 마켓플레이스 URL을 직접 입력하지 않아도 됩니다:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "sol-plugins": {
+      "source": {
+        "source": "url",
+        "url": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git"
+      }
+    }
+  }
+}
+```
+
+이후 플러그인 설치:
+```bash
+/plugin install <플러그인명>@sol-plugins
+```
+
+또는 `/plugin` 명령어로 플러그인 목록을 탐색하여 설치할 수도 있습니다.
+
+---
+
 ## 포함된 플러그인
 
 ### confluence
@@ -48,28 +76,6 @@ export CONFLUENCE_API_TOKEN="your-bearer-token"
 - `/confluence:search 텍스트탐지`
 
 ---
-
-## 프로젝트에서 마켓플레이스 자동 등록
-
-프로젝트의 `.claude/settings.json`에 추가하면, 팀원들이 마켓플레이스 URL을 직접 입력하지 않아도 됩니다:
-
-```json
-{
-  "extraKnownMarketplaces": {
-    "sol-plugins": {
-      "source": {
-        "source": "url",
-        "url": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git"
-      }
-    }
-  }
-}
-```
-
-이후 플러그인 설치:
-```bash
-/plugin install confluence@sol-plugins
-```
 
 ## 기여하기
 
