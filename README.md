@@ -49,9 +49,9 @@ export CONFLUENCE_API_TOKEN="your-bearer-token"
 
 ---
 
-## 프로젝트에서 자동 설치 설정
+## 프로젝트에서 마켓플레이스 자동 등록
 
-프로젝트의 `.claude/settings.json`에 추가:
+프로젝트의 `.claude/settings.json`에 추가하면, 팀원들이 마켓플레이스 URL을 직접 입력하지 않아도 됩니다:
 
 ```json
 {
@@ -62,11 +62,13 @@ export CONFLUENCE_API_TOKEN="your-bearer-token"
         "url": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git"
       }
     }
-  },
-  "enabledPlugins": {
-    "confluence@sol-plugins": true
   }
 }
+```
+
+이후 플러그인 설치:
+```bash
+/plugin install confluence@sol-plugins
 ```
 
 ## 기여하기
