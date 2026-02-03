@@ -18,17 +18,7 @@ SOL 팀에서 사용하는 Claude Code 플러그인 모음입니다.
 ### 2. 플러그인 설치
 
 ```bash
-/plugin install confluence@sol-plugins
-```
-
-## 환경 설정
-
-### Confluence 플러그인
-
-Confluence API 토큰이 필요합니다:
-
-```bash
-export CONFLUENCE_API_TOKEN="your-bearer-token"
+/plugin install <플러그인명>@sol-plugins
 ```
 
 ## 포함된 플러그인
@@ -36,6 +26,16 @@ export CONFLUENCE_API_TOKEN="your-bearer-token"
 ### confluence
 
 Confluence 페이지를 검색, 조회, 생성, 수정하는 플러그인입니다.
+
+**설치:**
+```bash
+/plugin install confluence@sol-plugins
+```
+
+**환경 설정:**
+```bash
+export CONFLUENCE_API_TOKEN="your-bearer-token"
+```
 
 **기능:**
 - 페이지 검색 (트리 구조로 결과 표시)
@@ -46,6 +46,8 @@ Confluence 페이지를 검색, 조회, 생성, 수정하는 플러그인입니�
 - "컨플에서 텍스트탐지 API 문서 검색해줘"
 - "배포 노트 작성해줘"
 - `/confluence:search 텍스트탐지`
+
+---
 
 ## 프로젝트에서 자동 설치 설정
 
@@ -65,14 +67,6 @@ Confluence 페이지를 검색, 조회, 생성, 수정하는 플러그인입니�
     "confluence@sol-plugins": true
   }
 }
-```
-
-## GitLab 인증
-
-비공개 저장소 접근을 위해 환경변수 설정:
-
-```bash
-export GITLAB_TOKEN=glpat-xxxxxxxxxxxx
 ```
 
 ## 기여하기
