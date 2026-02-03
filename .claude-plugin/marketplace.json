@@ -19,6 +19,17 @@
       },
       "keywords": ["confluence", "documentation", "wiki"],
       "category": "productivity"
+    },
+    {
+      "name": "python-senior-review",
+      "source": "./plugins/python-senior-review",
+      "description": "파이썬 코드를 시니어 개발자 관점에서 리뷰. 코드 품질, 설계 패턴, 성능, 보안 분석",
+      "version": "1.0.0",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["python", "code-review", "senior", "리뷰"],
+      "category": "development"
     }
   ]
 }
