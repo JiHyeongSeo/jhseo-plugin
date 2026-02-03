@@ -1,0 +1,25 @@
+{
+  "name": "sol-plugins",
+  "owner": {
+    "name": "SOL Team",
+    "email": "sol@nexon.com"
+  },
+  "metadata": {
+    "description": "SOL 팀 Claude Code 플러그인 모음",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "confluence",
+      "source": "./confluence",
+      "description": "Confluence 페이지 검색/조회/생성/수정. 유해탐지팀 컨플루언스 문서 관리용",
+      "version": "1.0.0",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["confluence", "documentation", "wiki"],
+      "category": "productivity"
+    }
+  ]
+}
