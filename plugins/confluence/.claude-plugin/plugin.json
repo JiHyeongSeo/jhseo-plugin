@@ -7,10 +7,5 @@
   },
   "homepage": "https://gitlab.nexon.com/da_div/SOL/claude-plugins",
   "repository": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git",
-  "keywords": ["confluence", "documentation", "wiki", "컨플루언스", "문서"],
-  "components": {
-    "skills": "./skills",
-    "commands": "./commands",
-    "references": "./references"
-  }
+  "keywords": ["confluence", "documentation", "wiki", "컨플루언스", "문서"]
 }
