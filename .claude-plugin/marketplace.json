@@ -30,6 +30,17 @@
       },
       "keywords": ["code-review", "git", "security", "performance", "코드리뷰"],
       "category": "development"
+    },
+    {
+      "name": "deployment-notes",
+      "source": "./plugins/deployment-notes",
+      "description": "Git 태그 기반 배포 자동화. 패치 노트와 버전별 기능 내역을 Confluence에 자동 생성",
+      "version": "1.0.0",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["deployment", "release-notes", "patch-notes", "배포", "패치노트"],
+      "category": "productivity"
     }
   ]
 }

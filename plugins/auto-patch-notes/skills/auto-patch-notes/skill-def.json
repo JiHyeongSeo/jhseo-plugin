@@ -1,0 +1,29 @@
+{
+  "name": "auto-patch-notes",
+  "description": "Git 태그로 패치 노트 자동 생성",
+  "command": "auto-patch-notes",
+  "args": [
+    {
+      "name": "action",
+      "description": "실행할 작업 (create)",
+      "required": true,
+      "position": 0
+    },
+    {
+      "name": "tag",
+      "description": "배포 태그 (예: dev-v1.2.3)",
+      "required": false,
+      "position": 1
+    }
+  ],
+  "examples": [
+    {
+      "command": "/auto-patch-notes create dev-v1.2.3",
+      "description": "dev-v1.2.3 태그로 배포 노트 생성"
+    },
+    {
+      "command": "/auto-patch-notes create",
+      "description": "최신 태그로 배포 노트 생성"
+    }
+  ]
+}
