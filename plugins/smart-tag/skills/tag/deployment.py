@@ -66,14 +66,28 @@ def run_command(cmd: List[str], cwd: Optional[str] = None) -> Tuple[int, str, st
 
 def parse_tag(tag: str) -> Optional[Dict[str, str]]:
     """
-    태그 형식 파싱: {환경}-v{버전}
-    예: dev-v1.2.3 -> {"env": "dev", "version": "1.2.3"}
+    태그 형식 파싱 (유연한 형식 지원)
+
+    지원 형식:
+    - {환경}-v{버전}: dev-v1.2.3, prod-v2.14 -> {"env": "dev", "version": "1.2.3"}
+    - v{버전}: v1.2.3, v0.0.2 -> {"env": "", "version": "1.2.3"}
+    - {버전}: 1.2.3, 0.0.2 -> {"env": "", "version": "1.2.3"}
+    - 기타: 태그 전체를 버전으로 사용
     """
-    pattern = r"^(dev|stage|prod)-v(\d+\.\d+\.\d+)$"
-    match = re.match(pattern, tag)
-    if not match:
-        return None
-    return {"env": match.group(1), "version": match.group(2)}
+    # 1. {env}-v{version} 형식 시도 (dev-v1.2.3, stage-v2.14 등)
+    env_pattern = r"^(dev|stage|prod)-v(.+)$"
+    match = re.match(env_pattern, tag)
+    if match:
+        return {"env": match.group(1), "version": match.group(2)}
+
+    # 2. v{version} 형식 시도 (v1.2.3, v0.0.2 등)
+    v_pattern = r"^v(.+)$"
+    match = re.match(v_pattern, tag)
+    if match:
+        return {"env": "", "version": match.group(1)}
+
+    # 3. 그 외의 경우 태그 전체를 버전으로 사용
+    return {"env": "", "version": tag}
 
 
 def get_repo_name() -> Optional[str]:
