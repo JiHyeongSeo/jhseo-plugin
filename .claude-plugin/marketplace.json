@@ -32,14 +32,14 @@
       "category": "development"
     },
     {
-      "name": "auto-patch-notes",
-      "source": "./plugins/auto-patch-notes",
-      "description": "Git 태그로 패치 노트 자동 생성. 배포 이력 추적 및 릴리즈 노트를 Confluence에 자동 작성",
+      "name": "smart-tag",
+      "source": "./plugins/smart-tag",
+      "description": "대화형 Git 태그 생성 및 패치 노트 자동 작성. 커밋 선택부터 Confluence 문서 생성까지 한 번에",
       "version": "1.0.0",
       "author": {
         "name": "SOL Team"
       },
-      "keywords": ["deployment", "release-notes", "patch-notes", "배포", "패치노트"],
+      "keywords": ["git", "tag", "deployment", "patch-notes", "태그", "배포", "패치노트"],
       "category": "productivity"
     }
   ]
