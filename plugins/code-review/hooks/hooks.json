@@ -1,0 +1,16 @@
+{
+  "description": "Code Review plugin - AI-powered review on git commit",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

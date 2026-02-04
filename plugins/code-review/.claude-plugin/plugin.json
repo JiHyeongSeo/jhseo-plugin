@@ -1,0 +1,9 @@
+{
+  "name": "code-review",
+  "version": "1.0.0",
+  "description": "Git commit 시 AI 기반 심층 코드리뷰. Type Safety, Security, Performance, DB, Architecture 체크",
+  "author": {
+    "name": "SOL Team"
+  },
+  "keywords": ["code-review", "git", "security", "performance", "코드리뷰"]
+}
