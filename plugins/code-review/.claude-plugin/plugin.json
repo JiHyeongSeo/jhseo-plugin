@@ -1,6 +1,6 @@
 {
   "name": "code-review",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "AI 기반 심층 코드리뷰. 9개 카테고리 선택 검토 (All/Quick/Custom 프리셋)",
   "author": {
     "name": "SOL Team"

@@ -1,7 +1,6 @@
 ---
 name: code-review
-description: AI 기반 심층 코드리뷰. "코드리뷰", "code review", "리뷰해줘" 키워드에서 활성화
-user_invocable: false
+description: AI 기반 심층 코드리뷰를 진행합니다. "코드리뷰", "code review", "리뷰해줘" 등의 코드 리뷰를 해달라는 의미일 때 사용합니다.
 ---
 
 # Code Review 스킬

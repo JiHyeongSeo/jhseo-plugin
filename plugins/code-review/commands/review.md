@@ -1,7 +1,6 @@
 ---
 name: review
 description: 코드리뷰 수행 (카테고리 선택 가능)
-user_invocable: true
 ---
 
 # 코드리뷰 수행
