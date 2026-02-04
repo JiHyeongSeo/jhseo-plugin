@@ -1,6 +1,6 @@
 ---
 name: review
-description: 코드리뷰 수행
+description: 코드리뷰 수행 (카테고리 선택 가능)
 user_invocable: true
 ---
 
@@ -10,22 +10,93 @@ user_invocable: true
 
 ## 실행 절차
 
+### 1단계: 리뷰 대상 파일 확정
+
 1. 사용자가 리뷰 대상을 지정했으면 해당 파일 읽기
 2. 지정하지 않았으면 staged 파일 확인 (`git diff --staged --name-only`)
 3. staged 파일도 없으면 사용자에게 리뷰할 파일을 물어보기
-4. `.gitignore` 내용 확인
-5. 아래 기준에 따라 리뷰 수행
 
-## 리뷰 기준
+### 2단계: 리뷰 범위 선택
 
-### 카테고리별 체크
-1. **Type Safety**: 타입 안정성, any 남용, 타입 추론 이슈
-2. **Readability**: 가독성, 네이밍, 코드 구조
-3. **Security**: 민감정보 노출, SQL injection, XSS 등
-4. **Performance**: 시간복잡도 O(n²) 이상, 불필요한 연산, 메모리 낭비
-5. **Database**: N+1 쿼리, 인덱스 미사용, 트랜잭션 이슈
-6. **Architecture**: DTO 구조, 중복 코드 (3회 이상), 책임 분리
-7. **Gitignore**: 민감 파일(.env, credentials, *.key 등)이 .gitignore에 포함되어 있는지
+**AskUserQuestion 도구로 리뷰 범위를 선택받으세요.**
+
+```
+question: "리뷰 범위를 선택하세요"
+header: "Scope"
+multiSelect: false  ← 단일 선택
+options:
+  1. label: "All (전체 검토)"
+     description: "9개 카테고리 모두 검토 (Recommended)"
+  2. label: "Custom (직접 선택)"
+     description: "검토할 카테고리를 직접 선택"
+```
+
+### 3단계: Custom 선택 시 카테고리 선택
+
+사용자가 "Custom"을 선택한 경우에만 이 단계를 실행합니다.
+
+**AskUserQuestion 도구로 카테고리를 선택받으세요.**
+
+```
+question: "검토할 카테고리를 선택하세요 (복수 선택 가능)"
+header: "Categories"
+multiSelect: true  ← 복수 선택
+options:
+  1. label: "Type Safety"
+     description: "타입 안정성, any 남용, 타입 추론"
+  2. label: "Security"
+     description: "보안 취약점, 민감정보 노출"
+  3. label: "Performance"
+     description: "O(n²) 복잡도, 메모리 낭비"
+  4. label: "Database"
+     description: "N+1 쿼리, 인덱스, 트랜잭션"
+```
+
+사용자가 "Other"를 선택하면 추가 카테고리를 안내하거나 텍스트로 입력받으세요:
+- Architecture (아키텍처, 코드 품질, 네이밍)
+- Error Handling (예외 처리, 로깅 품질)
+- Code Style (언어/프레임워크 스타일 가이드)
+- Business Logic (엣지 케이스, 비즈니스 규칙)
+- Gitignore (민감 파일 포함 여부)
+
+**전체 카테고리 목록 (9개):**
+1. type-safety
+2. security
+3. performance
+4. database
+5. architecture
+6. error-handling
+7. code-style
+8. business-logic
+9. gitignore
+
+### 4단계: 파일 내용 수집
+
+1. 대상 파일들의 내용 읽기
+2. `.gitignore` 내용 확인 (gitignore 선택 시)
+3. staged diff 내용 확인 (`git diff --staged`)
+
+### 5단계: 선택된 카테고리 검토
+
+**선택된 카테고리에 대해서만 검토를 수행합니다.**
+
+각 카테고리의 검토 기준은 `agents/[카테고리명]/AGENT.md` 파일을 참조하세요.
+
+### 6단계: 결과 출력
+
+## 출력 형식
+
+### 요약
+- 검토 카테고리: [선택된 카테고리 목록]
+- 전체 이슈 수: N개
+- 필수: N개 / 권장: N개 / 선택: N개
+- 총평: (한 줄 요약)
+
+### 이슈 목록
+
+Critical 이슈를 먼저 나열하고, 이후 Major, Minor 순서로 출력합니다.
+
+각 이슈는 해당 카테고리의 AGENT.md에 정의된 형식을 따릅니다.
 
 ### 심각도 분류
 - **Critical**: 즉시 수정 (보안, 심각한 버그)
@@ -36,35 +107,6 @@ user_invocable: true
 - **🔴 필수 (MUST FIX)**: 프로덕션 배포 전 반드시 수정
 - **🟡 권장 (SHOULD FIX)**: 코드 품질 향상
 - **🔵 선택 (NICE TO HAVE)**: 시간 여유 있을 때
-
-## 출력 형식
-
-### 요약
-- 전체 이슈 수: N개
-- 필수: N개 / 권장: N개 / 선택: N개
-- 총평: (한 줄 요약)
-
-### 이슈 목록
-
-각 이슈에 대해 다음 형식으로 출력:
-
-```
-## [심각도] 카테고리 - [필수/권장/선택]
-
-**파일:** 파일명
-**라인:** 라인번호
-
-**문제점:**
-왜 문제인지, 어떤 상황에서 문제가 되는지 설명
-
-**Before:**
-문제 코드
-
-**After:**
-개선된 코드
-
-**우선순위:** 1-5
-```
 
 ### 시니어 한마디
 실무 관점에서 이 코드에 대한 총평과 조언

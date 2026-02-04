@@ -1,9 +1,47 @@
 {
   "name": "code-review",
-  "version": "1.0.0",
-  "description": "Git commit 시 AI 기반 심층 코드리뷰. Type Safety, Security, Performance, DB, Architecture 체크",
+  "version": "2.1.0",
+  "description": "AI 기반 심층 코드리뷰. 9개 카테고리 선택 검토 (All/Quick/Custom 프리셋)",
   "author": {
     "name": "SOL Team"
   },
-  "keywords": ["code-review", "git", "security", "performance", "코드리뷰"]
+  "keywords": ["code-review", "git", "security", "performance", "코드리뷰"],
+  "agents": [
+    {
+      "name": "type-safety",
+      "path": "agents/type-safety/AGENT.md"
+    },
+    {
+      "name": "security",
+      "path": "agents/security/AGENT.md"
+    },
+    {
+      "name": "performance",
+      "path": "agents/performance/AGENT.md"
+    },
+    {
+      "name": "database",
+      "path": "agents/database/AGENT.md"
+    },
+    {
+      "name": "architecture",
+      "path": "agents/architecture/AGENT.md"
+    },
+    {
+      "name": "error-handling",
+      "path": "agents/error-handling/AGENT.md"
+    },
+    {
+      "name": "code-style",
+      "path": "agents/code-style/AGENT.md"
+    },
+    {
+      "name": "business-logic",
+      "path": "agents/business-logic/AGENT.md"
+    },
+    {
+      "name": "gitignore",
+      "path": "agents/gitignore/AGENT.md"
+    }
+  ]
 }
