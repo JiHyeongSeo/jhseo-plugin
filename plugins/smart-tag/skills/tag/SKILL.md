@@ -224,7 +224,7 @@ git push origin {환경}-v{버전}
 ### 5. 패치노트 생성
 ```bash
 # --prev-tag 옵션으로 커밋 범위 지정 가능
-python ${PLUGIN_DIR}/deployment.py create --tag {환경}-v{버전} --prev-tag {이전태그} --no-interactive
+python ${PLUGIN_DIR}/skills/tag/deployment.py create --tag {환경}-v{버전} --prev-tag {이전태그} --no-interactive
 ```
 
 ## 문서 생성 위치
