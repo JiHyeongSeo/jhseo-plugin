@@ -180,12 +180,56 @@ def get_file_changes(from_tag: Optional[str], to_tag: str) -> Dict[str, List[Dic
     return changes
 
 
-def get_tag_date(tag: str) -> str:
-    """태그 생성 날짜 가져오기"""
-    code, stdout, _ = run_command(["git", "log", "-1", "--format=%ai", tag])
+def get_file_diff(from_tag: Optional[str], to_tag: str, file_path: str, max_lines: int = 50) -> str:
+    """특정 파일의 diff 내용 가져오기"""
+    if from_tag:
+        cmd = ["git", "diff", from_tag, to_tag, "--", file_path]
+    else:
+        cmd = ["git", "diff", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", to_tag, "--", file_path]
+
+    code, stdout, _ = run_command(cmd)
     if code != 0:
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return ""
+
+    # diff 내용을 최대 max_lines 줄로 제한
+    lines = stdout.split("\n")
+    if len(lines) > max_lines:
+        return "\n".join(lines[:max_lines]) + f"\n... ({len(lines) - max_lines}줄 더 있음)"
     return stdout
+
+
+def get_file_diffs(from_tag: Optional[str], to_tag: str, file_changes: Dict[str, List[Dict[str, str]]], max_files: int = 30) -> Dict[str, str]:
+    """모든 변경 파일의 diff 내용 가져오기"""
+    diffs = {}
+    file_count = 0
+
+    # 추가, 수정, 삭제 순으로 처리
+    all_files = []
+    for file_info in file_changes.get("added", []):
+        all_files.append((file_info["path"], "added"))
+    for file_info in file_changes.get("modified", []):
+        if file_info.get("type") != "binary":
+            all_files.append((file_info["path"], "modified"))
+    for file_info in file_changes.get("deleted", []):
+        all_files.append((file_info["path"], "deleted"))
+
+    for file_path, change_type in all_files:
+        if file_count >= max_files:
+            break
+        # 바이너리 파일, 락 파일 등 제외
+        if any(ext in file_path for ext in [".lock", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".ttf"]):
+            continue
+        diff = get_file_diff(from_tag, to_tag, file_path)
+        if diff:
+            diffs[file_path] = diff
+            file_count += 1
+
+    return diffs
+
+
+def get_tag_date(tag: str) -> str:
+    """현재 날짜 반환 (배포 시점 기준)"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_template() -> str:
@@ -279,21 +323,6 @@ def search_version_document(version: str, parent_page_id: str, doc_type: str = "
     return None
 
 
-def generate_summary_from_commits(commits: List[Dict[str, str]]) -> str:
-    """커밋 메시지에서 요약 생성 (첫 커밋 메시지 활용)"""
-    if not commits:
-        return "배포"
-
-    # 첫 번째 커밋 메시지 사용
-    first_commit = commits[0]["message"]
-
-    # 최대 50자로 제한
-    if len(first_commit) > 50:
-        return first_commit[:47] + "..."
-
-    return first_commit
-
-
 def update_deployment_history(page_id: str, env: str, env_kr: str, tag_date: str) -> Dict:
     """문서의 배포 이력 섹션 업데이트"""
     # 기존 페이지 내용 가져오기
@@ -344,32 +373,86 @@ def update_deployment_history(page_id: str, env: str, env_kr: str, tag_date: str
 
 
 def find_or_create_release_notes_page(patch_notes_page_id: str, service_name: str, interactive: bool = True) -> Optional[str]:
-    """상세 릴리즈 노트 페이지 찾거나 생성"""
-    # 1. 먼저 검색
+    """릴리즈 노트 페이지 찾거나 생성 (사용자에게 공간 확인)"""
+    # 1. 먼저 검색하여 추천 공간 찾기
     search_result = search_confluence(f"{service_name} 상세 릴리즈 노트")
+    recommended_page = None
 
     if search_result.get("total", 0) > 0:
         pages = search_result.get("pages", [])
         if pages:
-            page = pages[0]
-            if interactive:
-                print(f"\n찾은 페이지: {page['title']} (ID: {page['id']})")
-                print(f"URL: {page['url']}")
-                response = input("이 페이지를 사용하시겠습니까? (y/n): ")
-                if response.lower() == 'y':
-                    return page['id']
-            else:
-                return page['id']
+            recommended_page = pages[0]
 
-    # 2. 없으면 생성 제안
     if interactive:
-        print(f"\n'{service_name} 상세 릴리즈 노트' 페이지가 없습니다.")
-        print(f"패치노트 페이지 하위에 생성하시겠습니까?")
-        response = input("생성하시겠습니까? (y/n): ")
-        if response.lower() != 'y':
-            return None
+        print("\n=== 릴리즈 노트 생성 공간 선택 ===")
 
-    # 3. 페이지 생성
+        if recommended_page:
+            print(f"\n[추천] 기존 페이지 발견:")
+            print(f"  제목: {recommended_page['title']}")
+            print(f"  ID: {recommended_page['id']}")
+            print(f"  URL: {recommended_page['url']}")
+            print()
+            print("옵션:")
+            print("  1. 추천 공간 사용 (Enter)")
+            print("  2. 다른 페이지 ID 입력")
+            print("  3. 새 페이지 생성")
+            response = input("\n선택 (1/2/3) [기본: 1]: ").strip()
+
+            if response == "" or response == "1":
+                return recommended_page['id']
+            elif response == "2":
+                page_id = input("페이지 ID를 입력하세요: ").strip()
+                if page_id:
+                    # 페이지 존재 확인
+                    page_info = get_confluence_page(page_id)
+                    if "error" not in page_info:
+                        print(f"  → {page_info.get('title', '알 수 없음')} 페이지를 사용합니다.")
+                        return page_id
+                    else:
+                        print(f"  ✗ 페이지를 찾을 수 없습니다: {page_info.get('error')}")
+                        return None
+                return None
+            elif response == "3":
+                # 새 페이지 생성으로 진행
+                pass
+            else:
+                print("잘못된 선택입니다.")
+                return None
+        else:
+            print(f"\n'{service_name} 상세 릴리즈 노트' 페이지를 찾을 수 없습니다.")
+            print()
+            print("옵션:")
+            print("  1. 새 페이지 생성 (Enter)")
+            print("  2. 기존 페이지 ID 입력")
+            response = input("\n선택 (1/2) [기본: 1]: ").strip()
+
+            if response == "2":
+                page_id = input("페이지 ID를 입력하세요: ").strip()
+                if page_id:
+                    page_info = get_confluence_page(page_id)
+                    if "error" not in page_info:
+                        print(f"  → {page_info.get('title', '알 수 없음')} 페이지를 사용합니다.")
+                        return page_id
+                    else:
+                        print(f"  ✗ 페이지를 찾을 수 없습니다: {page_info.get('error')}")
+                        return None
+                return None
+            elif response not in ["", "1"]:
+                print("잘못된 선택입니다.")
+                return None
+    else:
+        # non-interactive 모드: 추천 페이지가 있으면 사용
+        if recommended_page:
+            return recommended_page['id']
+
+    # 새 페이지 생성
+    if interactive:
+        parent_id = input(f"부모 페이지 ID를 입력하세요 [기본: {patch_notes_page_id}]: ").strip()
+        if not parent_id:
+            parent_id = patch_notes_page_id
+    else:
+        parent_id = patch_notes_page_id
+
     title = f"{service_name} 상세 릴리즈 노트"
     content = f"""<h2>개요</h2>
 <p>이 페이지는 {service_name}의 버전별 상세 기능 내역을 관리합니다.</p>
@@ -379,11 +462,11 @@ def find_or_create_release_notes_page(patch_notes_page_id: str, service_name: st
 <ac:structured-macro ac:name="children" ac:schema-version="2" ac:macro-id="release-notes-children" />
 """
 
-    result = create_confluence_page(title, content, patch_notes_page_id, dry_run=False)
+    result = create_confluence_page(title, content, parent_id, dry_run=False)
 
     if result.get("success"):
         page_id = result.get("id")
-        print(f"\n✓ 상세 릴리즈 노트 페이지 생성 완료!")
+        print(f"\n✓ 릴리즈 노트 페이지 생성 완료!")
         print(f"  페이지 ID: {page_id}")
         print(f"  URL: {result.get('url')}")
         return page_id
@@ -392,54 +475,11 @@ def find_or_create_release_notes_page(patch_notes_page_id: str, service_name: st
         return None
 
 
-def generate_patch_note_content(
-    tag_info: Dict[str, str],
-    commits: List[Dict[str, str]],
-    tag_date: str,
-    service_name: str,
-    release_note_url: Optional[str] = None,
-    is_new: bool = True,
-) -> str:
-    """간략한 패치노트 콘텐츠 생성"""
-    env = tag_info["env"]
-    version = tag_info["version"]
-    env_kr = ENV_MAPPING.get(env, env)
-
-    if is_new:
-        # 새 문서: 배포 이력 + 주요 변경 사항
-        html = f"""<h2>배포 이력</h2>
-<table>
-<tr><th>환경</th><th>배포 일시</th></tr>
-<tr><td>{env_kr} ({env})</td><td>{tag_date}</td></tr>
-</table>
-
-<h2>주요 변경 사항</h2>
-<p>총 {len(commits)}개의 커밋이 포함되어 있습니다.</p>
-"""
-
-        if commits:
-            html += "<h3>주요 커밋</h3>\n<ul>\n"
-            for commit in commits[:5]:
-                html += f"<li><code>{commit['hash']}</code> - {commit['message']}</li>\n"
-            if len(commits) > 5:
-                html += f"<li>... 외 {len(commits) - 5}개 커밋</li>\n"
-            html += "</ul>\n"
-
-        if release_note_url:
-            html += f"""<h2>상세 내역</h2>
-<p>자세한 변경 사항은 <a href="{release_note_url}">상세 릴리즈 노트</a>를 참고하세요.</p>
-"""
-    else:
-        # 기존 문서 업데이트: 반환 안함 (update_deployment_history 사용)
-        html = ""
-
-    return html
-
-
 def generate_release_note_content(
     tag_info: Dict[str, str],
     commits: List[Dict[str, str]],
     file_changes: Dict[str, List[Dict[str, str]]],
+    file_diffs: Dict[str, str],
     tag_date: str,
     service_name: str,
     is_new: bool = True,
@@ -447,7 +487,7 @@ def generate_release_note_content(
     """상세 릴리즈 노트 콘텐츠 생성"""
     env = tag_info["env"]
     version = tag_info["version"]
-    env_kr = ENV_MAPPING.get(env, env)
+    env_kr = ENV_MAPPING.get(env, env) if env else ""
 
     if not is_new:
         # 기존 문서 업데이트: 배포 이력만 업데이트 (반환 안함)
@@ -478,77 +518,45 @@ def generate_release_note_content(
     else:
         html += "<p>커밋 히스토리가 없습니다.</p>\n"
 
-    # 변경된 파일 목록
-    html += "<h3>변경된 파일</h3>\n"
+    # 파일별 상세 변경 내용
+    html += "<h2>파일별 상세 변경 내용</h2>\n"
 
     total_files = len(file_changes["added"]) + len(file_changes["modified"]) + len(file_changes["deleted"])
     html += f"<p>총 {total_files}개 파일 변경</p>\n"
 
+    # 추가된 파일
     if file_changes["added"]:
-        html += f"<h4>추가된 파일 ({len(file_changes['added'])}개)</h4>\n<ul>\n"
-        for file in file_changes["added"][:20]:  # 최대 20개만 표시
-            html += f"<li><code>{file['path']}</code> (+{file['added']} lines)</li>\n"
-        if len(file_changes["added"]) > 20:
-            html += f"<li>... 외 {len(file_changes['added']) - 20}개</li>\n"
-        html += "</ul>\n"
+        html += f"<h3>추가된 파일 ({len(file_changes['added'])}개)</h3>\n"
+        for file_info in file_changes["added"]:
+            file_path = file_info["path"]
+            html += f"<h4><code>{file_path}</code> (+{file_info['added']} lines)</h4>\n"
+            if file_path in file_diffs:
+                diff_content = file_diffs[file_path].replace("<", "&lt;").replace(">", "&gt;")
+                html += f"<ac:structured-macro ac:name=\"code\" ac:schema-version=\"1\"><ac:parameter ac:name=\"language\">diff</ac:parameter><ac:plain-text-body><![CDATA[{diff_content}]]></ac:plain-text-body></ac:structured-macro>\n"
 
+    # 수정된 파일
     if file_changes["modified"]:
-        html += f"<h4>수정된 파일 ({len(file_changes['modified'])}개)</h4>\n<ul>\n"
-        for file in file_changes["modified"][:20]:
-            if file.get("type") == "binary":
-                html += f"<li><code>{file['path']}</code> (binary)</li>\n"
+        html += f"<h3>수정된 파일 ({len(file_changes['modified'])}개)</h3>\n"
+        for file_info in file_changes["modified"]:
+            file_path = file_info["path"]
+            if file_info.get("type") == "binary":
+                html += f"<h4><code>{file_path}</code> (binary)</h4>\n"
+                html += "<p><em>바이너리 파일 - diff 표시 불가</em></p>\n"
             else:
-                html += f"<li><code>{file['path']}</code> (+{file['added']} -{file['deleted']} lines)</li>\n"
-        if len(file_changes["modified"]) > 20:
-            html += f"<li>... 외 {len(file_changes['modified']) - 20}개</li>\n"
-        html += "</ul>\n"
+                html += f"<h4><code>{file_path}</code> (+{file_info['added']} -{file_info['deleted']} lines)</h4>\n"
+                if file_path in file_diffs:
+                    diff_content = file_diffs[file_path].replace("<", "&lt;").replace(">", "&gt;")
+                    html += f"<ac:structured-macro ac:name=\"code\" ac:schema-version=\"1\"><ac:parameter ac:name=\"language\">diff</ac:parameter><ac:plain-text-body><![CDATA[{diff_content}]]></ac:plain-text-body></ac:structured-macro>\n"
 
+    # 삭제된 파일
     if file_changes["deleted"]:
-        html += f"<h4>삭제된 파일 ({len(file_changes['deleted'])}개)</h4>\n<ul>\n"
-        for file in file_changes["deleted"][:20]:
-            html += f"<li><code>{file['path']}</code> (-{file['deleted']} lines)</li>\n"
-        if len(file_changes["deleted"]) > 20:
-            html += f"<li>... 외 {len(file_changes['deleted']) - 20}개</li>\n"
-        html += "</ul>\n"
-
-    # 배포 절차
-    html += """<h2>배포 절차</h2>
-<h3>배포 전 체크리스트</h3>
-<ul>
-<li>[ ] 코드 리뷰 완료</li>
-<li>[ ] 테스트 통과 확인</li>
-<li>[ ] 데이터베이스 마이그레이션 검토</li>
-<li>[ ] 의존성 변경 사항 확인</li>
-</ul>
-
-<h3>배포 명령어</h3>
-<pre><code>git checkout {env}-v{version}
-# 배포 스크립트 실행
-</code></pre>
-
-<h3>배포 후 검증</h3>
-<ul>
-<li>[ ] 서비스 Health Check</li>
-<li>[ ] API 응답 확인</li>
-<li>[ ] 로그 확인</li>
-<li>[ ] 모니터링 지표 확인</li>
-</ul>
-"""
-
-    # 롤백 계획
-    html += """<h2>롤백 계획</h2>
-<h3>롤백 시나리오</h3>
-<ul>
-<li>서비스 장애 발생 시</li>
-<li>심각한 버그 발견 시</li>
-<li>성능 저하 발생 시</li>
-</ul>
-
-<h3>롤백 명령어</h3>
-<pre><code># 이전 버전으로 롤백
-# (이전 태그 확인 후 실행)
-</code></pre>
-"""
+        html += f"<h3>삭제된 파일 ({len(file_changes['deleted'])}개)</h3>\n"
+        for file_info in file_changes["deleted"]:
+            file_path = file_info["path"]
+            html += f"<h4><code>{file_path}</code> (-{file_info['deleted']} lines)</h4>\n"
+            if file_path in file_diffs:
+                diff_content = file_diffs[file_path].replace("<", "&lt;").replace(">", "&gt;")
+                html += f"<ac:structured-macro ac:name=\"code\" ac:schema-version=\"1\"><ac:parameter ac:name=\"language\">diff</ac:parameter><ac:plain-text-body><![CDATA[{diff_content}]]></ac:plain-text-body></ac:structured-macro>\n"
 
     return html
 
@@ -588,7 +596,7 @@ def create_confluence_page(title: str, content: str, parent_page_id: Optional[st
 
 
 def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bool = False, interactive: bool = True) -> Dict:
-    """배포 노트 생성 메인 함수 (패치노트 + 상세 릴리즈 노트)"""
+    """배포 노트 생성 메인 함수 (릴리즈 노트만 생성)"""
     # 태그 파싱
     tag_info = parse_tag(tag)
     if not tag_info:
@@ -602,7 +610,7 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
     config = REPO_CONFIG[repo_name]
     env = tag_info["env"]
     version = tag_info["version"]
-    env_kr = ENV_MAPPING.get(env, env)
+    env_kr = ENV_MAPPING.get(env, env) if env else ""
 
     # 이전 태그 자동 탐색 (같은 버전의 다른 환경 또는 이전 버전)
     if not prev_tag:
@@ -611,38 +619,29 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
     # Git 정보 수집
     commits = get_commits(prev_tag, tag)
     file_changes = get_file_changes(prev_tag, tag)
+    file_diffs = get_file_diffs(prev_tag, tag, file_changes)
     tag_date = get_tag_date(tag)
 
-    # 커밋 메시지에서 요약 생성
-    summary = generate_summary_from_commits(commits)
-
     # 문서 제목 생성
-    date_str = datetime.strptime(tag_date[:10], "%Y-%m-%d").strftime("%Y/%m/%d")
-    patch_note_title = f"({date_str}) v{version} {summary}"
     release_note_title = f"v{version} 릴리즈 노트"
-
-    # 1. 버전별 문서가 이미 있는지 확인
-    existing_patch_id = search_version_document(version, config["patch_notes_page_id"], "patch")
-    existing_release_id = None
 
     # 상세 릴리즈 노트 페이지 찾거나 생성
     release_notes_page_id = config.get("release_notes_page_id")
     if not release_notes_page_id:
         if interactive:
-            print("\n=== 상세 릴리즈 노트 공간 설정 ===")
+            print("\n=== 릴리즈 노트 공간 설정 ===")
         release_notes_page_id = find_or_create_release_notes_page(
             config["patch_notes_page_id"],
             config["service_name"],
             interactive
         )
         if not release_notes_page_id:
-            return {"error": "상세 릴리즈 노트 페이지를 찾거나 생성할 수 없습니다."}
+            return {"error": "릴리즈 노트 페이지를 찾거나 생성할 수 없습니다."}
 
     # 릴리즈 노트 문서 존재 여부 확인
-    if release_notes_page_id:
-        existing_release_id = search_version_document(version, release_notes_page_id, "release")
+    existing_release_id = search_version_document(version, release_notes_page_id, "release")
 
-    # 2. 상세 릴리즈 노트 처리 (생성 또는 업데이트)
+    # 릴리즈 노트 처리 (생성 또는 업데이트)
     release_note_url = None
 
     if existing_release_id:
@@ -670,21 +669,22 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
             tag_info,
             commits,
             file_changes,
+            file_diffs,
             tag_date,
             config["service_name"],
             is_new=True,
         )
 
         if dry_run or interactive:
-            print(f"\n=== 상세 릴리즈 노트 미리보기 (신규 생성) ===")
+            print(f"\n=== 릴리즈 노트 미리보기 (신규 생성) ===")
             print(f"제목: {release_note_title}")
             print(f"부모 페이지 ID: {release_notes_page_id}")
-            print(f"커밋 수: {len(commits)}, 파일 변경: {sum(len(v) for v in file_changes.values())}")
+            print(f"커밋 수: {len(commits)}, 파일 변경: {sum(len(v) for v in file_changes.values())}, diff 파일: {len(file_diffs)}")
             if dry_run:
                 print(f"\n내용:\n{release_note_content[:500]}...")
 
         if interactive and not dry_run:
-            response = input("\n상세 릴리즈 노트를 생성하시겠습니까? (y/n): ")
+            response = input("\n릴리즈 노트를 생성하시겠습니까? (y/n): ")
             if response.lower() != 'y':
                 return {"error": "사용자가 취소했습니다."}
 
@@ -697,67 +697,9 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
             )
 
             if not release_result.get("success"):
-                return {"error": f"상세 릴리즈 노트 생성 실패: {release_result.get('error')}"}
+                return {"error": f"릴리즈 노트 생성 실패: {release_result.get('error')}"}
 
             release_note_url = release_result.get("url")
-
-    # 3. 간략한 패치노트 처리 (생성 또는 업데이트)
-    patch_note_url = None
-
-    if existing_patch_id:
-        # 기존 패치노트가 있으면 배포 이력만 업데이트
-        if interactive:
-            print(f"\n=== 기존 패치노트 발견 (ID: {existing_patch_id}) ===")
-            print(f"배포 이력에 {env_kr} ({env}) 환경 추가")
-
-        if not dry_run:
-            update_result = update_deployment_history(
-                existing_patch_id,
-                env,
-                env_kr,
-                tag_date
-            )
-            if "error" in update_result:
-                return {"error": f"패치노트 업데이트 실패: {update_result.get('error')}"}
-
-            # URL 가져오기
-            page_info = get_confluence_page(existing_patch_id)
-            patch_note_url = page_info.get("url")
-    else:
-        # 새 패치노트 생성
-        patch_note_content = generate_patch_note_content(
-            tag_info,
-            commits,
-            tag_date,
-            config["service_name"],
-            release_note_url,
-            is_new=True,
-        )
-
-        if dry_run or interactive:
-            print(f"\n=== 패치노트 미리보기 (신규 생성) ===")
-            print(f"제목: {patch_note_title}")
-            print(f"부모 페이지 ID: {config['patch_notes_page_id']}")
-            if dry_run:
-                print(f"\n내용:\n{patch_note_content[:500]}...")
-
-        if interactive and not dry_run:
-            response = input("\n패치노트를 생성하시겠습니까? (y/n): ")
-            if response.lower() != 'y':
-                return {"error": "사용자가 취소했습니다."}
-
-        if not dry_run:
-            patch_result = create_confluence_page(
-                patch_note_title,
-                patch_note_content,
-                config["patch_notes_page_id"],
-                dry_run=False
-            )
-
-            if not patch_result.get("success"):
-                return {"error": f"패치노트 생성 실패: {patch_result.get('error')}"}
-
-            patch_note_url = patch_result.get("url")
 
     # 반환
     if not dry_run:
@@ -767,9 +709,9 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
             "prev_tag": prev_tag,
             "commits": len(commits),
             "file_changes": sum(len(v) for v in file_changes.values()),
-            "patch_note_url": patch_note_url,
+            "file_diffs": len(file_diffs),
             "release_note_url": release_note_url,
-            "updated": bool(existing_patch_id or existing_release_id),
+            "updated": bool(existing_release_id),
         }
     else:
         return {
@@ -779,7 +721,7 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
             "prev_tag": prev_tag,
             "commits": len(commits),
             "file_changes": sum(len(v) for v in file_changes.values()),
-            "existing_patch": bool(existing_patch_id),
+            "file_diffs": len(file_diffs),
             "existing_release": bool(existing_release_id),
         }
 
@@ -814,14 +756,13 @@ def main():
         else:
             if result.get("success"):
                 if result.get("updated"):
-                    print("\n✓ 배포 노트 업데이트 완료!")
+                    print("\n✓ 릴리즈 노트 업데이트 완료!")
                     print("  기존 문서에 배포 이력 추가됨")
                 else:
-                    print("\n✓ 배포 노트 생성 완료!")
-                print(f"  패치노트: {result.get('patch_note_url')}")
-                print(f"  상세 릴리즈 노트: {result.get('release_note_url')}")
+                    print("\n✓ 릴리즈 노트 생성 완료!")
+                print(f"  릴리즈 노트: {result.get('release_note_url')}")
             else:
-                print(f"\n✗ 배포 노트 생성 실패: {result.get('error')}")
+                print(f"\n✗ 릴리즈 노트 생성 실패: {result.get('error')}")
 
         if not result.get("success"):
             sys.exit(1)
