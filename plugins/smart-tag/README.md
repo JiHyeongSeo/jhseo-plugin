@@ -35,10 +35,17 @@ claude plugin install /home/seoji/local/claude-plugins/plugins/smart-tag
 
 ## 사용 방법
 
+### 명령어
+
+다음 두 가지 형식으로 호출할 수 있습니다:
+
+- `/tag` - 스킬 이름으로 직접 호출 (자동완성 지원)
+- `/smart-tag:tag` - 정규화된 플러그인:스킬 형식
+
 ### 기본 사용 (대화형)
 
 ```
-사용자: /smart-tag:tag
+사용자: /tag (또는 /smart-tag:tag)
 
 Claude: 최근 10개 커밋을 보여드릴게요
         [커밋 목록 표시]
@@ -66,7 +73,7 @@ Claude: ✓ 태그 생성 완료: dev-v1.2.3
 ### 빠른 사용 (태그 지정)
 
 ```
-사용자: /smart-tag:tag dev-v1.2.3
+사용자: /tag dev-v1.2.3 (또는 /smart-tag:tag dev-v1.2.3)
 
 Claude: HEAD 커밋에 dev-v1.2.3 태그를 생성하시겠어요?
 
@@ -86,7 +93,7 @@ Claude: [태그 생성 + 문서 자동 생성]
 ## 워크플로우
 
 ```
-1. 사용자: /smart-tag:tag 입력
+1. 사용자: /tag 입력 (또는 /smart-tag:tag)
    ↓
 2. Claude: 최근 커밋 목록 표시
    ↓
@@ -333,6 +340,10 @@ Internal use only - SOL Team
 SOL Team
 
 ## 버전 히스토리
+
+- **1.0.6** (2026-02-05)
+  - Confluence 페이지 선택 시 대화형 확인 절차 추가
+  - 명령어 `/tag` 및 `/smart-tag:tag` 둘 다 지원 문서화
 
 - **1.0.5** (2026-02-05)
   - 모든 Git 저장소에서 사용 가능 (레포지토리 제한 제거)
