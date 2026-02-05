@@ -1,7 +1,7 @@
 {
   "name": "sol",
-  "version": "3.0.0",
-  "description": "AI 기반 심층 코드리뷰. 14개 카테고리 검토 + Critical 자동 수정 (Auto Review)",
+  "version": "3.1.0",
+  "description": "AI 기반 심층 코드리뷰. 4개 카테고리 검토 + Critical 자동 수정 (Auto Review)",
   "author": {
     "name": "SOL Team"
   },

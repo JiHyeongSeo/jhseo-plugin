@@ -25,7 +25,7 @@ header: "Scope"
 multiSelect: false  ← 단일 선택
 options:
   1. label: "All (전체 검토)"
-     description: "9개 카테고리 모두 검토 (Recommended)"
+     description: "4개 카테고리 모두 검토 (Recommended)"
   2. label: "Custom (직접 선택)"
      description: "검토할 카테고리를 직접 선택"
 ```
@@ -41,50 +41,33 @@ question: "검토할 카테고리를 선택하세요 (복수 선택 가능)"
 header: "Categories"
 multiSelect: true  ← 복수 선택
 options:
-  1. label: "Type Safety"
-     description: "타입 안정성, any 남용, 타입 추론"
-  2. label: "Security"
-     description: "보안 취약점, 민감정보 노출"
+  1. label: "Security"
+     description: "보안 취약점, 민감정보 노출, .gitignore 검사"
+  2. label: "Code Quality"
+     description: "코드 스타일, 타입 안정성, 아키텍처, 의존성, 에러 처리, 로깅"
   3. label: "Performance"
-     description: "O(n²) 복잡도, 메모리 낭비"
-  4. label: "Database"
-     description: "N+1 쿼리, 인덱스, 트랜잭션"
+     description: "O(n²) 복잡도, 메모리 낭비, 캐싱 누락"
+  4. label: "Verification"
+     description: "테스트 품질, 비즈니스 로직 검증"
 ```
 
-사용자가 "Other"를 선택하면 추가 카테고리를 안내하거나 텍스트로 입력받으세요:
-- Architecture (아키텍처, 코드 품질, 네이밍)
-- Error Handling (예외 처리, 로깅 품질)
-- Code Style (언어/프레임워크 스타일 가이드)
-- Business Logic (엣지 케이스, 비즈니스 규칙)
-- Gitignore (민감 파일 포함 여부)
-
-**전체 카테고리 목록 (14개):**
-1. type-safety
-2. security
+**전체 카테고리 목록 (4개):**
+1. security
+2. code-quality
 3. performance
-4. database
-5. architecture
-6. error-handling
-7. code-style
-8. business-logic
-9. gitignore
-10. testing
-11. dependency
-12. api-design
-13. logging
-14. i18n
+4. verification
 
 ### 4단계: 파일 내용 수집
 
 1. 대상 파일들의 내용 읽기
-2. `.gitignore` 내용 확인 (gitignore 선택 시)
+2. `.gitignore` 내용 확인 (security 선택 시)
 3. staged diff 내용 확인 (`git diff --staged`)
 
 ### 5단계: 선택된 카테고리 검토
 
 **선택된 카테고리에 대해서만 검토를 수행합니다.**
 
-각 카테고리의 검토 기준은 `agents/[카테고리명]/AGENT.md` 파일을 참조하세요.
+각 카테고리의 검토 기준은 `agents/[카테고리명].md` 파일을 참조하세요.
 
 ### 6단계: 결과 출력
 
@@ -100,7 +83,7 @@ options:
 
 Critical 이슈를 먼저 나열하고, 이후 Major, Minor 순서로 출력합니다.
 
-각 이슈는 해당 카테고리의 AGENT.md에 정의된 형식을 따릅니다.
+각 이슈는 해당 카테고리의 agent 파일에 정의된 형식을 따릅니다.
 
 ### 심각도 분류
 - **Critical**: 즉시 수정 (보안, 심각한 버그)

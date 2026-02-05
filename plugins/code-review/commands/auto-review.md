@@ -9,7 +9,7 @@ description: 자동 코드리뷰 - Critical 이슈 자동 수정 및 반복 검�
 
 ## 핵심 동작
 
-1. 14개 에이전트로 코드 검토
+1. 4개 에이전트로 코드 검토
 2. Critical 이슈 발견 시 수정안 제안
 3. 사용자가 선택한 항목만 수정 적용
 4. Critical 0개 또는 최대 3회까지 반복
@@ -36,26 +36,16 @@ total_fixed = []
 round_count++
 ```
 
-#### 2-1. 14개 에이전트로 검토
+#### 2-1. 4개 에이전트로 검토
 
 모든 에이전트의 기준을 적용하여 검토:
 
-| # | 에이전트 | 파일 |
-|---|---------|------|
-| 1 | Type Safety | agents/type-safety.md |
-| 2 | Security | agents/security.md |
-| 3 | Performance | agents/performance.md |
-| 4 | Database | agents/database.md |
-| 5 | Architecture | agents/architecture.md |
-| 6 | Error Handling | agents/error-handling.md |
-| 7 | Code Style | agents/code-style.md |
-| 8 | Business Logic | agents/business-logic.md |
-| 9 | Gitignore | agents/gitignore.md |
-| 10 | Testing | agents/testing.md |
-| 11 | Dependency | agents/dependency.md |
-| 12 | API Design | agents/api-design.md |
-| 13 | Logging | agents/logging.md |
-| 14 | i18n | agents/i18n.md |
+| # | 에이전트 | 파일 | 검토 항목 |
+|---|---------|------|----------|
+| 1 | Security | agents/security.md | 보안 취약점, 민감정보, .gitignore |
+| 2 | Code Quality | agents/code-quality.md | 코드 스타일, 타입, 아키텍처, 의존성, 에러 처리, 로깅 |
+| 3 | Performance | agents/performance.md | 복잡도, 메모리, 캐싱 |
+| 4 | Verification | agents/verification.md | 테스트 품질, 비즈니스 로직 |
 
 #### 2-2. Critical 이슈 필터링
 
@@ -132,7 +122,7 @@ options:
 📊 요약
 ┌────────────────┬───────────────────────────┐
 │ 총 라운드      │ {N} / 3                   │
-│ 검토 에이전트  │ 14개                      │
+│ 검토 에이전트  │ 4개                       │
 │ 발견된 이슈    │ Critical {X} / Major {Y}  │
 │ 수정된 이슈    │ {Z}개                     │
 │ 최종 상태      │ {상태}                    │
