@@ -25,9 +25,9 @@
 
 ## 2. 섹션 헤더 스타일
 
-### 표준 패턴: h2 안에 아이콘(32px) + strong 텍스트 + 수평선
+### 표준 패턴: h1 안에 아이콘(32px) + strong 텍스트 + 수평선
 ```xml
-<h2><ac:image ac:height="32"><ri:url ri:value="https://example.com/icon.png" /></ac:image> <strong>섹션 제목</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://example.com/icon.png" /></ac:image> <strong>섹션 제목</strong></h1>
 <hr />
 ```
 
@@ -257,7 +257,7 @@ Midnight 권장 (어두운 배경)
 ## 13. 표준 문서 구조
 
 1. **개요 (Overview)** - blockquote로 간단한 설명
-2. **본문 섹션들** - h2 + 아이콘 + strong 헤더 + hr, 섹션 간 `<p>&nbsp;</p>`로 공백, 테이블 또는 목록으로 정리
+2. **본문 섹션들** - h1 + 아이콘 + strong 헤더 + hr, 섹션 간 `<p>&nbsp;</p>`로 공백, 테이블 또는 목록으로 정리
 3. **참고 자료 / 관련 문서** - 링크 목록
 
 ## 14. 모범 사례

@@ -31,13 +31,13 @@
 <ac:layout-section ac:type="single">
 <ac:layout-cell>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991106.png" /></ac:image> <strong>개요</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991106.png" /></ac:image> <strong>개요</strong></h1>
 <hr />
 <blockquote><p>{overview}</p></blockquote>
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991112.png" /></ac:image> <strong>{section_title}</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991112.png" /></ac:image> <strong>{section_title}</strong></h1>
 <hr />
 <blockquote><p>{section_description}</p></blockquote>
 
@@ -66,7 +66,7 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/455/455691.png" /></ac:image> <strong>참고 자료</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/455/455691.png" /></ac:image> <strong>참고 자료</strong></h1>
 <hr />
 <ul>
 <li><p><a href="{reference1_url}">{reference1_title}</a></p></li>

@@ -38,7 +38,7 @@
 <ac:layout-section ac:type="single">
 <ac:layout-cell>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991106.png" /></ac:image> <strong>배포 정보</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991106.png" /></ac:image> <strong>배포 정보</strong></h1>
 <hr />
 <table>
 <colgroup>
@@ -63,7 +63,7 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991112.png" /></ac:image> <strong>변경 사항</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991112.png" /></ac:image> <strong>변경 사항</strong></h1>
 <hr />
 <ul>
 <li><p>{changes}</p></li>
@@ -71,7 +71,7 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/8832/8832108.png" /></ac:image> <strong>배포 절차</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/8832/8832108.png" /></ac:image> <strong>배포 절차</strong></h1>
 <hr />
 <ol>
 <li><p>{step1}</p></li>
@@ -81,13 +81,13 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/595/595067.png" /></ac:image> <strong>롤백 계획</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/595/595067.png" /></ac:image> <strong>롤백 계획</strong></h1>
 <hr />
 <p>{rollback_plan}</p>
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/8832/8832108.png" /></ac:image> <strong>체크리스트</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/8832/8832108.png" /></ac:image> <strong>체크리스트</strong></h1>
 <hr />
 <ac:task-list>
 <ac:task>
@@ -114,7 +114,7 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/3686/3686930.png" /></ac:image> <strong>배포 후 확인 사항</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/3686/3686930.png" /></ac:image> <strong>배포 후 확인 사항</strong></h1>
 <hr />
 <ul>
 <li><p>{post_deployment_check1}</p></li>
@@ -123,13 +123,13 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/595/595067.png" /></ac:image> <strong>이슈 및 해결</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/595/595067.png" /></ac:image> <strong>이슈 및 해결</strong></h1>
 <hr />
 <p>{issues_and_resolutions}</p>
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/455/455691.png" /></ac:image> <strong>참고 자료</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/455/455691.png" /></ac:image> <strong>참고 자료</strong></h1>
 <hr />
 <ul>
 <li><p>{reference1}</p></li>

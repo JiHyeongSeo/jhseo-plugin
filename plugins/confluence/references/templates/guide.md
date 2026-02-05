@@ -34,13 +34,13 @@
 <ac:layout-section ac:type="single">
 <ac:layout-cell>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991106.png" /></ac:image> <strong>개요</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/2991/2991106.png" /></ac:image> <strong>개요</strong></h1>
 <hr />
 <blockquote><p>{overview}</p></blockquote>
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/4961/4961654.png" /></ac:image> <strong>설치</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/4961/4961654.png" /></ac:image> <strong>설치</strong></h1>
 <hr />
 <ac:structured-macro ac:name="code">
 <ac:parameter ac:name="language">bash</ac:parameter>
@@ -50,7 +50,7 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/3953/3953226.png" /></ac:image> <strong>설정</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/3953/3953226.png" /></ac:image> <strong>설정</strong></h1>
 <hr />
 <blockquote><p>{config_description}</p></blockquote>
 
@@ -69,7 +69,7 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/1077/1077012.png" /></ac:image> <strong>사용 방법</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/1077/1077012.png" /></ac:image> <strong>사용 방법</strong></h1>
 <hr />
 <blockquote><p>{usage_description}</p></blockquote>
 
@@ -98,7 +98,7 @@
 
 <p>&nbsp;</p>
 
-<h2><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/455/455691.png" /></ac:image> <strong>참고 자료</strong></h2>
+<h1><ac:image ac:height="32"><ri:url ri:value="https://cdn-icons-png.flaticon.com/128/455/455691.png" /></ac:image> <strong>참고 자료</strong></h1>
 <hr />
 <ul>
 <li><p><a href="{reference_url}">{reference_title}</a></p></li>
