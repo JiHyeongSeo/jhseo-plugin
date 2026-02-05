@@ -12,6 +12,15 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 # 환경 변수
+def parse_version(version_str: str) -> tuple:
+    """버전 문자열을 튜플로 변환 (semver 비교용)"""
+    try:
+        parts = version_str.split(".")
+        return tuple(int(p) for p in parts)
+    except (ValueError, AttributeError):
+        return (0,)
+
+
 def get_confluence_cli_path() -> str:
     """Confluence CLI 경로 찾기"""
     # 1. 환경 변수 확인
@@ -22,10 +31,10 @@ def get_confluence_cli_path() -> str:
     home = os.path.expanduser("~")
     cache_path = os.path.join(home, ".claude", "plugins", "cache", "sol-plugins", "confluence")
     if os.path.exists(cache_path):
-        # 최신 버전 찾기
+        # 최신 버전 찾기 (semver 비교)
         versions = [d for d in os.listdir(cache_path) if os.path.isdir(os.path.join(cache_path, d))]
         if versions:
-            versions.sort(reverse=True)
+            versions.sort(key=parse_version, reverse=True)
             cli_path = os.path.join(cache_path, versions[0], "confluence.py")
             if os.path.exists(cli_path):
                 return cli_path
