@@ -58,7 +58,7 @@ options:
 - Business Logic (엣지 케이스, 비즈니스 규칙)
 - Gitignore (민감 파일 포함 여부)
 
-**전체 카테고리 목록 (9개):**
+**전체 카테고리 목록 (14개):**
 1. type-safety
 2. security
 3. performance
@@ -68,6 +68,11 @@ options:
 7. code-style
 8. business-logic
 9. gitignore
+10. testing
+11. dependency
+12. api-design
+13. logging
+14. i18n
 
 ### 4단계: 파일 내용 수집
 

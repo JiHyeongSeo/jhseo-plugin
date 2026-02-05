@@ -1,5 +1,5 @@
 ---
-name: code-review
+name: review
 description: AI 기반 심층 코드리뷰를 진행합니다. "코드리뷰", "code review", "리뷰해줘" 등의 코드 리뷰를 해달라는 의미일 때 사용합니다.
 ---
 
@@ -20,6 +20,11 @@ description: AI 기반 심층 코드리뷰를 진행합니다. "코드리뷰", "
 | **Code Style** | 언어별 관용적 스타일 (Pythonic, TS Best Practice), 프레임워크 컨벤션 |
 | **Business Logic** | 엣지 케이스 누락, 비즈니스 규칙 검증, 동시성/순서 이슈, 데이터 정합성 |
 | **Gitignore** | 민감 파일(.env, credentials, *.key 등)이 .gitignore에 포함되어 있는지 |
+| **Testing** | 테스트 누락, 네이밍 규칙, 모킹 패턴, assertion, 테스트 격리 |
+| **Dependency** | 미사용 import, 순환 참조, 경로 불일치, deprecated 패키지 |
+| **API Design** | REST 규칙, HTTP 메서드, 응답 형식, 에러 형식, 버전 관리 |
+| **Logging** | 민감정보 로깅, console.log 남용, 로그 레벨 적절성, 추적 ID |
+| **i18n** | 하드코딩된 문자열, 날짜/숫자 포맷, pluralization, RTL 지원 |
 
 ## Error Handling 세부 항목
 
@@ -70,9 +75,10 @@ description: AI 기반 심층 코드리뷰를 진행합니다. "코드리뷰", "
 
 | 옵션 | 설명 |
 |------|------|
-| **All (전체)** | 9개 카테고리 모두 검토 |
+| **All (전체)** | 14개 카테고리 모두 검토 |
 | **Custom (직접)** | 원하는 카테고리만 선택하여 검토 |
 
 ## 명령어
 
-- `/code-review:review` - 코드리뷰 실행 (All/Custom 선택 후 진행)
+- `/sol:review` - 코드리뷰 실행 (All/Custom 선택 후 진행)
+- `/sol:auto-review` - 자동 코드리뷰 (Critical 자동 수정, 최대 3회 반복)

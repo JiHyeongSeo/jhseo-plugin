@@ -1,9 +1,9 @@
 {
-  "name": "code-review",
-  "version": "2.3.0",
-  "description": "AI 기반 심층 코드리뷰. 9개 카테고리 선택 검토 (All/Quick/Custom 프리셋)",
+  "name": "sol",
+  "version": "3.0.0",
+  "description": "AI 기반 심층 코드리뷰. 14개 카테고리 검토 + Critical 자동 수정 (Auto Review)",
   "author": {
     "name": "SOL Team"
   },
-  "keywords": ["code-review", "git", "security", "performance", "코드리뷰"]
+  "keywords": ["code-review", "git", "security", "performance", "코드리뷰", "auto-review", "auto-fix"]
 }

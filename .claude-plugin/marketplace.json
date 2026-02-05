@@ -21,14 +21,14 @@
       "category": "productivity"
     },
     {
-      "name": "code-review",
+      "name": "sol",
       "source": "./plugins/code-review",
-      "description": "Git commit 시 AI 기반 심층 코드리뷰. Type Safety, Security, Performance, DB, Architecture 체크",
-      "version": "2.3.0",
+      "description": "AI 기반 심층 코드리뷰. 14개 카테고리 검토 + Critical 자동 수정 (Auto Review)",
+      "version": "3.0.0",
       "author": {
         "name": "SOL Team"
       },
-      "keywords": ["code-review", "git", "security", "performance", "코드리뷰"],
+      "keywords": ["code-review", "git", "security", "performance", "코드리뷰", "auto-review", "auto-fix"],
       "category": "development"
     },
     {
