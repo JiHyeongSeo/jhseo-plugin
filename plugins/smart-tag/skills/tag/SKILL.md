@@ -63,6 +63,24 @@ Git 태그 생성부터 Confluence 패치 노트 작성까지 대화형으로 �
 export CONFLUENCE_API_TOKEN="your-bearer-token"
 ```
 
+## 서비스·레포 매핑
+
+Confluence 페이지 검색 시 레포지토리에 해당하는 서비스명을 사용합니다.
+**confluence 플러그인의 SKILL.md에 정의된 매핑을 참조하세요.**
+
+| 레포지토리 | 서비스명 |
+|------------|----------|
+| engagement_api_fastapi | 텍스트탐지 API |
+| engagement_image_detect_fastapi | 이미지탐지 API |
+| clean-chatbot/api | 클린챗봇 백엔드 |
+| clean-chatbot/front-new | 클린챗봇 프론트 |
+| bws/console-backend, console-front, db-server | 통합 차단어(BWS) |
+
+**검색 순서:**
+1. 현재 레포지토리 이름으로 위 테이블에서 서비스명 조회
+2. 서비스명이 있으면 `"{서비스명} 릴리즈 노트"`로 검색
+3. 매핑이 없으면 레포지토리 이름으로 직접 검색
+
 ## 지원하는 태그 형식
 
 다양한 태그 형식을 유연하게 지원합니다:

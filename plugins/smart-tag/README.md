@@ -337,6 +337,11 @@ SOL Team
 
 ## 버전 히스토리
 
+- **1.0.8** (2026-02-05)
+  - SKILL.md에 서비스·레포 매핑 테이블 추가
+  - confluence 플러그인의 매핑 참조 안내
+  - Claude가 검색 시 서비스명으로 Confluence 페이지 검색
+
 - **1.0.7** (2026-02-05)
   - deployment.py 단순화: 검색 로직 제거
   - `--parent-page-id` 필수 인자로 변경

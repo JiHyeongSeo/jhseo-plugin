@@ -41,12 +41,30 @@ def get_confluence_cli_path() -> str:
 CONFLUENCE_CLI = get_confluence_cli_path()
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
-# 레포지토리별 설정 (선택적)
-# service_name만 정의하면 됩니다. 페이지 ID는 자동으로 검색합니다.
+# 레포지토리별 설정
+# service_name: Confluence 검색 시 사용되는 서비스명
 REPO_CONFIG = {
     "engagement_api_fastapi": {
-        "service_name": "텍스트/이미지탐지 API",
-    }
+        "service_name": "텍스트탐지 API",
+    },
+    "engagement_image_detect_fastapi": {
+        "service_name": "이미지탐지 API",
+    },
+    "api": {  # clean-chatbot/api
+        "service_name": "클린챗봇 백엔드",
+    },
+    "front-new": {  # clean-chatbot/front-new
+        "service_name": "클린챗봇 프론트",
+    },
+    "console-backend": {  # bws/console-backend
+        "service_name": "통합 차단어(BWS)",
+    },
+    "console-front": {  # bws/console-front
+        "service_name": "통합 차단어(BWS)",
+    },
+    "db-server": {  # bws/db-server
+        "service_name": "통합 차단어(BWS)",
+    },
 }
 
 # 환경 매핑
