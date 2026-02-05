@@ -280,11 +280,18 @@ git push origin {태그명}
 
 Claude가 confluence 플러그인을 사용하여 적절한 릴리즈 노트 공간을 찾습니다.
 
+**Confluence CLI 경로 찾기:**
+```bash
+# 먼저 실제 설치된 버전 확인
+ls ~/.claude/plugins/cache/sol-plugins/confluence/
+# 출력된 버전으로 경로 구성 (예: 1.0.1)
+```
+
 **Step 1: 서비스명으로 검색**
 
 ```bash
-# confluence 플러그인으로 검색 (result_tree 포함)
-python ${CONFLUENCE_CLI} search "{서비스명} 릴리즈 노트" -l 10
+# confluence 플러그인으로 검색 (실제 버전 사용)
+python ~/.claude/plugins/cache/sol-plugins/confluence/{실제버전}/confluence.py search "{서비스명} 릴리즈 노트" -l 10
 ```
 
 **Step 2: 결과를 tree 형태로 사용자에게 표시**
@@ -308,9 +315,9 @@ SOL 팀
 - 사용자: "릴리즈 노트로 검색해봐" → 새 키워드로 검색
 
 ```bash
-# 추가 검색 예시
-python ${CONFLUENCE_CLI} search "SOL 팀" -l 10
-python ${CONFLUENCE_CLI} search "릴리즈 노트" -l 10
+# 추가 검색 예시 (실제 버전으로 대체)
+python ~/.claude/plugins/cache/sol-plugins/confluence/{버전}/confluence.py search "SOL 팀" -l 10
+python ~/.claude/plugins/cache/sol-plugins/confluence/{버전}/confluence.py search "릴리즈 노트" -l 10
 ```
 
 **Step 4: 페이지 확정 후 릴리즈 노트 생성**
