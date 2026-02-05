@@ -41,12 +41,11 @@ def get_confluence_cli_path() -> str:
 CONFLUENCE_CLI = get_confluence_cli_path()
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
-# 레포지토리별 설정
+# 레포지토리별 설정 (선택적)
+# service_name만 정의하면 됩니다. 페이지 ID는 자동으로 검색합니다.
 REPO_CONFIG = {
     "engagement_api_fastapi": {
         "service_name": "텍스트/이미지탐지 API",
-        "patch_notes_page_id": "1719919196",  # "텍스트/이미지 탐지 API 패치노트" 페이지
-        "release_notes_page_id": None,  # "상세 릴리즈 노트" 페이지 (자동 생성 또는 검색)
     }
 }
 
@@ -372,16 +371,25 @@ def update_deployment_history(page_id: str, env: str, env_kr: str, tag_date: str
     return update_confluence_page(page_id, content=content)
 
 
-def find_or_create_release_notes_page(patch_notes_page_id: str, service_name: str, interactive: bool = True) -> Optional[str]:
+def find_or_create_release_notes_page(service_name: str, interactive: bool = True) -> Optional[str]:
     """릴리즈 노트 페이지 찾거나 생성 (사용자에게 공간 확인)"""
     # 1. 먼저 검색하여 추천 공간 찾기
-    search_result = search_confluence(f"{service_name} 상세 릴리즈 노트")
-    recommended_page = None
+    search_queries = [
+        f"{service_name} 상세 릴리즈 노트",
+        f"{service_name} 릴리즈 노트",
+        f"{service_name} release notes",
+    ]
 
-    if search_result.get("total", 0) > 0:
-        pages = search_result.get("pages", [])
-        if pages:
-            recommended_page = pages[0]
+    recommended_pages = []
+    for query in search_queries:
+        search_result = search_confluence(query)
+        if search_result.get("total", 0) > 0:
+            pages = search_result.get("pages", [])
+            for page in pages:
+                if page not in recommended_pages:
+                    recommended_pages.append(page)
+
+    recommended_page = recommended_pages[0] if recommended_pages else None
 
     if interactive:
         print("\n=== 릴리즈 노트 생성 공간 선택 ===")
@@ -391,16 +399,29 @@ def find_or_create_release_notes_page(patch_notes_page_id: str, service_name: st
             print(f"  제목: {recommended_page['title']}")
             print(f"  ID: {recommended_page['id']}")
             print(f"  URL: {recommended_page['url']}")
+
+            # 추가 추천 페이지 표시
+            if len(recommended_pages) > 1:
+                print("\n[기타 관련 페이지]")
+                for i, page in enumerate(recommended_pages[1:4], start=2):  # 최대 3개까지만 표시
+                    print(f"  {i}. {page['title']} (ID: {page['id']})")
+
             print()
             print("옵션:")
             print("  1. 추천 공간 사용 (Enter)")
-            print("  2. 다른 페이지 ID 입력")
-            print("  3. 새 페이지 생성")
-            response = input("\n선택 (1/2/3) [기본: 1]: ").strip()
+            if len(recommended_pages) > 1:
+                print(f"  2-{min(len(recommended_pages), 4)}. 기타 관련 페이지 선택")
+            print("  0. 직접 페이지 ID 입력")
+            print("  new. 새 페이지 생성")
+            response = input("\n선택 [기본: 1]: ").strip()
 
             if response == "" or response == "1":
                 return recommended_page['id']
-            elif response == "2":
+            elif response.isdigit() and 2 <= int(response) <= min(len(recommended_pages), 4):
+                selected_page = recommended_pages[int(response) - 1]
+                print(f"  → {selected_page['title']} 페이지를 사용합니다.")
+                return selected_page['id']
+            elif response == "0":
                 page_id = input("페이지 ID를 입력하세요: ").strip()
                 if page_id:
                     # 페이지 존재 확인
@@ -412,14 +433,14 @@ def find_or_create_release_notes_page(patch_notes_page_id: str, service_name: st
                         print(f"  ✗ 페이지를 찾을 수 없습니다: {page_info.get('error')}")
                         return None
                 return None
-            elif response == "3":
+            elif response.lower() == "new":
                 # 새 페이지 생성으로 진행
                 pass
             else:
                 print("잘못된 선택입니다.")
                 return None
         else:
-            print(f"\n'{service_name} 상세 릴리즈 노트' 페이지를 찾을 수 없습니다.")
+            print(f"\n'{service_name}' 관련 릴리즈 노트 페이지를 찾을 수 없습니다.")
             print()
             print("옵션:")
             print("  1. 새 페이지 생성 (Enter)")
@@ -444,14 +465,16 @@ def find_or_create_release_notes_page(patch_notes_page_id: str, service_name: st
         # non-interactive 모드: 추천 페이지가 있으면 사용
         if recommended_page:
             return recommended_page['id']
+        else:
+            # 추천 페이지가 없으면 에러
+            return None
 
-    # 새 페이지 생성
-    if interactive:
-        parent_id = input(f"부모 페이지 ID를 입력하세요 [기본: {patch_notes_page_id}]: ").strip()
-        if not parent_id:
-            parent_id = patch_notes_page_id
-    else:
-        parent_id = patch_notes_page_id
+    # 새 페이지 생성 (interactive 모드에서만 도달 가능)
+    print("\n새 릴리즈 노트 페이지를 생성합니다.")
+    parent_id = input("부모 페이지 ID를 입력하세요: ").strip()
+    if not parent_id:
+        print("부모 페이지 ID가 필요합니다.")
+        return None
 
     title = f"{service_name} 상세 릴리즈 노트"
     content = f"""<h2>개요</h2>
@@ -602,12 +625,15 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
     if not tag_info:
         return {"error": f"Invalid tag format: {tag}. Expected format: {{env}}-v{{version}}"}
 
-    # 레포지토리 확인
+    # 레포지토리 이름 가져오기
     repo_name = get_repo_name()
-    if not repo_name or repo_name not in REPO_CONFIG:
-        return {"error": f"Unsupported repository: {repo_name}"}
+    if not repo_name:
+        return {"error": "Git 레포지토리를 찾을 수 없습니다."}
 
-    config = REPO_CONFIG[repo_name]
+    # 레포지토리별 설정 확인 (있으면 사용, 없으면 레포지토리 이름 사용)
+    config = REPO_CONFIG.get(repo_name, {})
+    service_name = config.get("service_name", repo_name)
+
     env = tag_info["env"]
     version = tag_info["version"]
     env_kr = ENV_MAPPING.get(env, env) if env else ""
@@ -626,17 +652,16 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
     release_note_title = f"v{version} 릴리즈 노트"
 
     # 상세 릴리즈 노트 페이지 찾거나 생성
-    release_notes_page_id = config.get("release_notes_page_id")
+    if interactive:
+        print("\n=== 릴리즈 노트 공간 설정 ===")
+
+    release_notes_page_id = find_or_create_release_notes_page(
+        service_name,
+        interactive
+    )
+
     if not release_notes_page_id:
-        if interactive:
-            print("\n=== 릴리즈 노트 공간 설정 ===")
-        release_notes_page_id = find_or_create_release_notes_page(
-            config["patch_notes_page_id"],
-            config["service_name"],
-            interactive
-        )
-        if not release_notes_page_id:
-            return {"error": "릴리즈 노트 페이지를 찾거나 생성할 수 없습니다."}
+        return {"error": "릴리즈 노트 페이지를 찾거나 생성할 수 없습니다."}
 
     # 릴리즈 노트 문서 존재 여부 확인
     existing_release_id = search_version_document(version, release_notes_page_id, "release")
@@ -671,7 +696,7 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
             file_changes,
             file_diffs,
             tag_date,
-            config["service_name"],
+            service_name,
             is_new=True,
         )
 

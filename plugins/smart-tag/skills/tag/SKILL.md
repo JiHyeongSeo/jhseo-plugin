@@ -16,18 +16,17 @@ Git 태그 생성부터 Confluence 패치 노트 작성까지 대화형으로 �
 ## 워크플로우
 
 ```
-1. 사용자: "/tag" 명령 입력
+1. 사용자: "/smart-tag:tag" 명령 입력
    ↓
 2. Claude: 최근 커밋 목록 표시 (최근 10개)
    ↓
 3. Claude: 대화형 질문
    - 어느 커밋에 태그를 달까요?
-   - 환경은? (dev/stage/prod)
-   - 버전은? (예: 1.2.3)
+   - 태그명은? (예: dev-v1.2.3, v1.2.3, 1.0.0 등)
    ↓
 4. Claude: git tag 생성
-   - 형식: {환경}-v{버전}
-   - 예: dev-v1.2.3
+   - 사용자가 입력한 태그명으로 생성
+   - 예: dev-v1.2.3, v1.2.3, release-2.0.0 등
    ↓
 5. Claude: 릴리즈 노트 커밋 범위 확인 (중요!)
    - 이전 태그 자동 탐색 결과 표시
@@ -55,33 +54,33 @@ Git 태그 생성부터 Confluence 패치 노트 작성까지 대화형으로 �
 export CONFLUENCE_API_TOKEN="your-bearer-token"
 ```
 
-## 지원 레포지토리
+## 지원하는 태그 형식
 
-현재 다음 레포지토리를 지원합니다:
-- **engagement_api_fastapi** (텍스트/이미지탐지 API)
-  - 태그 형식: `{환경}-v{버전}`
-  - 환경: `dev`, `stage`, `prod`
+다양한 태그 형식을 유연하게 지원합니다:
 
-## 태그 형식
+**환경별 배포 태그:**
+- `{환경}-v{버전}` 형식 (예: `dev-v1.2.3`, `prod-v2.0.0`)
+- 환경: `dev`, `stage`, `prod` 등 자유롭게 설정 가능
 
-```
-{환경}-v{버전}
-```
+**단순 버전 태그:**
+- `v{버전}` 형식 (예: `v1.2.3`, `v2.0.0`)
+- `{버전}` 형식 (예: `1.2.3`, `0.0.1`)
 
-예시:
-- `dev-v1.0.0` - 개발 환경
-- `stage-v1.2.3` - 스테이징 환경
-- `prod-v2.0.0` - 운영 환경
+**커스텀 접두사:**
+- `release-{버전}` 형식 (예: `release-1.2.3`)
+- `{프로젝트명}-v{버전}` 형식 (예: `api-v1.2.3`)
+
+모든 Git 저장소에서 사용 가능하며, 프로젝트의 태그 규칙에 맞춰 자유롭게 활용할 수 있습니다.
 
 ## 자동 생성 문서
 
 태그 생성 시 **릴리즈 노트**가 자동으로 Confluence에 생성됩니다:
 
 ### 릴리즈 노트
-- **위치**: "상세 릴리즈 노트" 페이지 하위
-- **제목 형식**: `v{버전} 릴리즈 노트`
+- **위치**: 사용자가 선택한 Confluence 페이지 하위
+- **제목 형식**: `{태그명} 릴리즈 노트` (예: `v1.2.3 릴리즈 노트`, `dev-v1.2.3 릴리즈 노트`)
 - **내용**:
-  - 배포 이력 테이블 (환경별 배포 일시)
+  - 배포 이력 테이블 (환경별 배포 일시, 환경별 태그인 경우)
   - 버전 정보
   - 전체 커밋 히스토리
   - **파일별 상세 변경 내용** (git diff 포함)
@@ -89,8 +88,9 @@ export CONFLUENCE_API_TOKEN="your-bearer-token"
     - 수정된 파일
     - 삭제된 파일
 
-## 버전별 단일 문서 관리
+## 문서 관리 방식
 
+### 환경별 태그 (dev-v1.2.3, stage-v1.2.3 등)
 같은 버전은 환경에 관계없이 **하나의 문서**로 관리:
 - 첫 배포 (dev-v1.2.3): 새 문서 생성
 - 두 번째 배포 (stage-v1.2.3): 배포 이력에 stage 추가
@@ -103,19 +103,23 @@ export CONFLUENCE_API_TOKEN="your-bearer-token"
 | 스테이징 (stage) | 2026-02-05 |
 | 운영 (prod) | 2026-02-10 |
 
+### 단순 버전 태그 (v1.2.3, 1.0.0 등)
+각 태그마다 별도의 문서로 관리:
+- v1.2.3: 새 문서 생성
+- v1.2.4: 새 문서 생성
+
 ## 사용 예시
 
 ### 기본 사용
 ```
-사용자: /tag
+사용자: /smart-tag:tag
 Claude: 최근 커밋을 보여드릴게요...
        [커밋 목록 표시]
        어느 커밋에 태그를 달까요?
 사용자: 맨 위 커밋
-Claude: 환경을 선택하세요 (dev/stage/prod)
-사용자: dev
-Claude: 버전을 입력하세요 (예: 1.2.3)
-사용자: 1.2.3
+Claude: 생성할 태그명을 입력하세요
+       (예: dev-v1.2.3, v1.2.3, 1.0.0, release-1.2.3)
+사용자: dev-v1.2.3
 Claude: git tag dev-v1.2.3 생성 완료!
 
        릴리즈 노트에 포함할 커밋 범위를 확인해주세요.
@@ -135,8 +139,18 @@ Claude: git push origin dev-v1.2.3 완료!
 
 ### 빠른 사용 (인자 제공)
 ```
-사용자: /tag dev-v1.2.3
+사용자: /smart-tag:tag dev-v1.2.3
 Claude: HEAD 커밋에 dev-v1.2.3 태그를 생성하시겠어요?
+사용자: 네
+Claude: [태그 생성 + 문서 생성]
+
+사용자: /smart-tag:tag v2.0.0
+Claude: HEAD 커밋에 v2.0.0 태그를 생성하시겠어요?
+사용자: 네
+Claude: [태그 생성 + 문서 생성]
+
+사용자: /smart-tag:tag 1.0.1
+Claude: HEAD 커밋에 1.0.1 태그를 생성하시겠어요?
 사용자: 네
 Claude: [태그 생성 + 문서 생성]
 ```
@@ -149,16 +163,16 @@ Claude가 물어보는 질문들:
    - "최근 10개 커밋입니다. 어느 커밋에 태그를 달까요?"
    - 옵션: 커밋 해시 또는 "맨 위", "2번째" 등
 
-2. **환경 선택**
-   - "배포 환경을 선택하세요"
-   - 옵션: dev / stage / prod
+2. **태그명 입력**
+   - "생성할 태그명을 입력하세요"
+   - 다양한 형식 지원:
+     - `dev-v1.2.3` (환경-버전 형식)
+     - `v1.2.3` (버전만)
+     - `1.2.3` (순수 버전)
+     - `release-1.2.3` (커스텀 접두사)
 
-3. **버전 입력**
-   - "버전을 입력하세요 (예: 1.2.3)"
-   - Semantic Versioning 형식
-
-4. **최종 확인**
-   - "{환경}-v{버전} 태그를 생성하고 패치노트를 작성하시겠어요?"
+3. **최종 확인**
+   - "{태그명} 태그를 생성하고 패치노트를 작성하시겠어요?"
    - 옵션: 예 / 아니오
 
 5. **릴리즈 노트 커밋 범위 확인** (중요!)
@@ -199,13 +213,13 @@ git log --oneline -10
 
 ### 2. 태그 생성
 ```bash
-git tag {환경}-v{버전} {커밋-해시}
+git tag {태그명} {커밋-해시}
 ```
 
 ### 3. 이전 태그 탐색 및 커밋 범위 확인
 ```bash
-# 같은 환경의 이전 태그 찾기
-git tag --sort=-version:refname | grep "^{환경}-v"
+# 이전 태그 찾기 (버전 순으로 정렬)
+git tag --sort=-version:refname
 
 # 커밋 범위 미리보기
 git log --oneline {이전태그}..{현재태그}
@@ -217,26 +231,29 @@ git rev-list --count {이전태그}..{현재태그}
 ### 4. 태그 푸시 (사용자 확인 후)
 ```bash
 # 사용자가 "예"를 선택한 경우에만 실행
-git push origin {환경}-v{버전}
+git push origin {태그명}
 ```
 
 ### 5. 릴리즈 노트 생성
 ```bash
 # --prev-tag 옵션으로 커밋 범위 지정 가능
-python ${PLUGIN_DIR}/skills/tag/deployment.py create --tag {환경}-v{버전} --prev-tag {이전태그} --no-interactive
+python ${PLUGIN_DIR}/skills/tag/deployment.py create --tag {태그명} --prev-tag {이전태그} --no-interactive
 ```
 
 ## 문서 생성 위치
 
-### 릴리즈 노트
-- **경로**: 유해탐지팀 > 텍스트/이미지 탐지 API > **상세 릴리즈 노트**
+### Confluence 릴리즈 노트
+- 대화형으로 Confluence 페이지 위치를 선택할 수 있습니다
+- 기존에 사용한 페이지가 있으면 자동으로 추천됩니다
+- 프로젝트별 원하는 공간에 자유롭게 생성 가능
 
-문서 구조:
+문서 구조 예시:
 ```
-3. 텍스트/이미지 탐지 API
-└── 텍스트/이미지탐지 API 상세 릴리즈 노트
+프로젝트 공간
+└── 릴리즈 노트 페이지
     ├── v1.2.3 릴리즈 노트
-    └── v1.2.0 릴리즈 노트
+    ├── v1.2.0 릴리즈 노트
+    └── v1.1.0 릴리즈 노트
 ```
 
 ## 수동 CLI 사용 (선택)
@@ -246,12 +263,17 @@ python ${PLUGIN_DIR}/skills/tag/deployment.py create --tag {환경}-v{버전} --
 ```bash
 # 대화형 모드
 python deployment.py create --tag dev-v1.2.3
+python deployment.py create --tag v2.0.0
+python deployment.py create --tag 1.0.1
 
 # 자동 모드
 python deployment.py create --tag dev-v1.2.3 --no-interactive
 
 # Dry-run
 python deployment.py create --tag dev-v1.2.3 --dry-run
+
+# 이전 태그 지정
+python deployment.py create --tag v1.2.3 --prev-tag v1.2.0
 ```
 
 ## 참조
