@@ -24,7 +24,7 @@
       "name": "sol",
       "source": "./plugins/code-review",
       "description": "AI 기반 심층 코드리뷰. 4개 카테고리 검토 + 선택한 이슈 자동 수정",
-      "version": "4.0.0",
+      "version": "1.4.0",
       "author": {
         "name": "SOL Team"
       },
