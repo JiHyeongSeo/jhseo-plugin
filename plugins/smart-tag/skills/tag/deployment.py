@@ -371,133 +371,6 @@ def update_deployment_history(page_id: str, env: str, env_kr: str, tag_date: str
     return update_confluence_page(page_id, content=content)
 
 
-def find_or_create_release_notes_page(service_name: str, interactive: bool = True) -> Optional[str]:
-    """릴리즈 노트 페이지 찾거나 생성 (사용자에게 공간 확인)"""
-    # 1. 먼저 검색하여 추천 공간 찾기
-    search_queries = [
-        f"{service_name} 상세 릴리즈 노트",
-        f"{service_name} 릴리즈 노트",
-        f"{service_name} release notes",
-    ]
-
-    recommended_pages = []
-    for query in search_queries:
-        search_result = search_confluence(query)
-        if search_result.get("total", 0) > 0:
-            pages = search_result.get("pages", [])
-            for page in pages:
-                if page not in recommended_pages:
-                    recommended_pages.append(page)
-
-    recommended_page = recommended_pages[0] if recommended_pages else None
-
-    if interactive:
-        print("\n=== 릴리즈 노트 생성 공간 선택 ===")
-
-        if recommended_page:
-            print(f"\n[추천] 기존 페이지 발견:")
-            print(f"  제목: {recommended_page['title']}")
-            print(f"  ID: {recommended_page['id']}")
-            print(f"  URL: {recommended_page['url']}")
-
-            # 추가 추천 페이지 표시
-            if len(recommended_pages) > 1:
-                print("\n[기타 관련 페이지]")
-                for i, page in enumerate(recommended_pages[1:4], start=2):  # 최대 3개까지만 표시
-                    print(f"  {i}. {page['title']} (ID: {page['id']})")
-
-            print()
-            print("옵션:")
-            print("  1. 추천 공간 사용 (Enter)")
-            if len(recommended_pages) > 1:
-                print(f"  2-{min(len(recommended_pages), 4)}. 기타 관련 페이지 선택")
-            print("  0. 직접 페이지 ID 입력")
-            print("  new. 새 페이지 생성")
-            response = input("\n선택 [기본: 1]: ").strip()
-
-            if response == "" or response == "1":
-                return recommended_page['id']
-            elif response.isdigit() and 2 <= int(response) <= min(len(recommended_pages), 4):
-                selected_page = recommended_pages[int(response) - 1]
-                print(f"  → {selected_page['title']} 페이지를 사용합니다.")
-                return selected_page['id']
-            elif response == "0":
-                page_id = input("페이지 ID를 입력하세요: ").strip()
-                if page_id:
-                    # 페이지 존재 확인
-                    page_info = get_confluence_page(page_id)
-                    if "error" not in page_info:
-                        print(f"  → {page_info.get('title', '알 수 없음')} 페이지를 사용합니다.")
-                        return page_id
-                    else:
-                        print(f"  ✗ 페이지를 찾을 수 없습니다: {page_info.get('error')}")
-                        return None
-                return None
-            elif response.lower() == "new":
-                # 새 페이지 생성으로 진행
-                pass
-            else:
-                print("잘못된 선택입니다.")
-                return None
-        else:
-            print(f"\n'{service_name}' 관련 릴리즈 노트 페이지를 찾을 수 없습니다.")
-            print()
-            print("옵션:")
-            print("  1. 새 페이지 생성 (Enter)")
-            print("  2. 기존 페이지 ID 입력")
-            response = input("\n선택 (1/2) [기본: 1]: ").strip()
-
-            if response == "2":
-                page_id = input("페이지 ID를 입력하세요: ").strip()
-                if page_id:
-                    page_info = get_confluence_page(page_id)
-                    if "error" not in page_info:
-                        print(f"  → {page_info.get('title', '알 수 없음')} 페이지를 사용합니다.")
-                        return page_id
-                    else:
-                        print(f"  ✗ 페이지를 찾을 수 없습니다: {page_info.get('error')}")
-                        return None
-                return None
-            elif response not in ["", "1"]:
-                print("잘못된 선택입니다.")
-                return None
-    else:
-        # non-interactive 모드: 추천 페이지가 있으면 사용
-        if recommended_page:
-            return recommended_page['id']
-        else:
-            # 추천 페이지가 없으면 에러
-            return None
-
-    # 새 페이지 생성 (interactive 모드에서만 도달 가능)
-    print("\n새 릴리즈 노트 페이지를 생성합니다.")
-    parent_id = input("부모 페이지 ID를 입력하세요: ").strip()
-    if not parent_id:
-        print("부모 페이지 ID가 필요합니다.")
-        return None
-
-    title = f"{service_name} 상세 릴리즈 노트"
-    content = f"""<h2>개요</h2>
-<p>이 페이지는 {service_name}의 버전별 상세 기능 내역을 관리합니다.</p>
-<p>각 버전의 자세한 변경 사항, 새로운 기능, 버그 수정 내역 등이 포함됩니다.</p>
-
-<h2>릴리즈 노트</h2>
-<ac:structured-macro ac:name="children" ac:schema-version="2" ac:macro-id="release-notes-children" />
-"""
-
-    result = create_confluence_page(title, content, parent_id, dry_run=False)
-
-    if result.get("success"):
-        page_id = result.get("id")
-        print(f"\n✓ 릴리즈 노트 페이지 생성 완료!")
-        print(f"  페이지 ID: {page_id}")
-        print(f"  URL: {result.get('url')}")
-        return page_id
-    else:
-        print(f"\n✗ 페이지 생성 실패: {result.get('error')}")
-        return None
-
-
 def generate_release_note_content(
     tag_info: Dict[str, str],
     commits: List[Dict[str, str]],
@@ -618,12 +491,38 @@ def create_confluence_page(title: str, content: str, parent_page_id: Optional[st
         return {"error": f"Invalid JSON response: {stdout}"}
 
 
-def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bool = False, interactive: bool = True) -> Dict:
-    """배포 노트 생성 메인 함수 (릴리즈 노트만 생성)"""
+def create_deployment_note(
+    tag: str,
+    parent_page_id: str,
+    prev_tag: Optional[str] = None,
+    dry_run: bool = False
+) -> Dict:
+    """배포 노트 생성 메인 함수
+
+    Claude가 confluence 플러그인으로 검색하여 찾은 페이지 ID를 전달받습니다.
+
+    Args:
+        tag: 배포 태그
+        parent_page_id: 부모 페이지 ID (필수 - Claude가 검색하여 전달)
+        prev_tag: 이전 태그 (미지정 시 자동 탐색)
+        dry_run: 실제 생성하지 않고 미리보기
+
+    Returns:
+        성공 시: {"success": True, ...}
+        에러 시: {"error": "..."}
+    """
     # 태그 파싱
     tag_info = parse_tag(tag)
     if not tag_info:
-        return {"error": f"Invalid tag format: {tag}. Expected format: {{env}}-v{{version}}"}
+        return {"error": f"Invalid tag format: {tag}"}
+
+    # 부모 페이지 확인
+    if not parent_page_id:
+        return {"error": "parent_page_id는 필수입니다. confluence 플러그인으로 검색 후 전달하세요."}
+
+    page_info = get_confluence_page(parent_page_id)
+    if "error" in page_info:
+        return {"error": f"부모 페이지를 찾을 수 없습니다: {page_info.get('error')}"}
 
     # 레포지토리 이름 가져오기
     repo_name = get_repo_name()
@@ -651,17 +550,7 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
     # 문서 제목 생성
     release_note_title = f"v{version} 릴리즈 노트"
 
-    # 상세 릴리즈 노트 페이지 찾거나 생성
-    if interactive:
-        print("\n=== 릴리즈 노트 공간 설정 ===")
-
-    release_notes_page_id = find_or_create_release_notes_page(
-        service_name,
-        interactive
-    )
-
-    if not release_notes_page_id:
-        return {"error": "릴리즈 노트 페이지를 찾거나 생성할 수 없습니다."}
+    release_notes_page_id = parent_page_id
 
     # 릴리즈 노트 문서 존재 여부 확인
     existing_release_id = search_version_document(version, release_notes_page_id, "release")
@@ -671,10 +560,6 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
 
     if existing_release_id:
         # 기존 릴리즈 노트가 있으면 배포 이력만 업데이트
-        if interactive:
-            print(f"\n=== 기존 릴리즈 노트 발견 (ID: {existing_release_id}) ===")
-            print(f"배포 이력에 {env_kr} ({env}) 환경 추가")
-
         if not dry_run:
             update_result = update_deployment_history(
                 existing_release_id,
@@ -699,19 +584,6 @@ def create_deployment_note(tag: str, prev_tag: Optional[str] = None, dry_run: bo
             service_name,
             is_new=True,
         )
-
-        if dry_run or interactive:
-            print(f"\n=== 릴리즈 노트 미리보기 (신규 생성) ===")
-            print(f"제목: {release_note_title}")
-            print(f"부모 페이지 ID: {release_notes_page_id}")
-            print(f"커밋 수: {len(commits)}, 파일 변경: {sum(len(v) for v in file_changes.values())}, diff 파일: {len(file_diffs)}")
-            if dry_run:
-                print(f"\n내용:\n{release_note_content[:500]}...")
-
-        if interactive and not dry_run:
-            response = input("\n릴리즈 노트를 생성하시겠습니까? (y/n): ")
-            if response.lower() != 'y':
-                return {"error": "사용자가 취소했습니다."}
 
         if not dry_run:
             release_result = create_confluence_page(
@@ -757,37 +629,27 @@ def main():
 
     # create 명령
     create_parser = subparsers.add_parser("create", help="배포 노트 생성")
-    create_parser.add_argument("--tag", help="배포 태그 (미지정 시 최신 태그 사용)")
-    create_parser.add_argument("--prev-tag", help="이전 태그 (미지정 시 자동 탐색)")
-    create_parser.add_argument("--dry-run", action="store_true", help="실제 생성하지 않고 미리보기")
-    create_parser.add_argument("--no-interactive", action="store_true", help="대화형 모드 비활성화 (자동 생성)")
+    create_parser.add_argument("--tag", required=True,
+                               help="배포 태그")
+    create_parser.add_argument("--parent-page-id", required=True,
+                               help="부모 페이지 ID (필수)")
+    create_parser.add_argument("--prev-tag",
+                               help="이전 태그 (미지정 시 자동 탐색)")
+    create_parser.add_argument("--dry-run", action="store_true",
+                               help="실제 생성하지 않고 미리보기")
 
     args = parser.parse_args()
 
     if args.command == "create":
-        # 태그 자동 탐색
-        if not args.tag:
-            code, stdout, _ = run_command(["git", "describe", "--tags", "--abbrev=0"])
-            if code != 0:
-                print(json.dumps({"error": "No tags found"}), file=sys.stderr)
-                sys.exit(1)
-            args.tag = stdout
+        result = create_deployment_note(
+            tag=args.tag,
+            parent_page_id=args.parent_page_id,
+            prev_tag=args.prev_tag,
+            dry_run=args.dry_run
+        )
 
-        interactive = not args.no_interactive
-        result = create_deployment_note(args.tag, args.prev_tag, args.dry_run, interactive)
-
-        if not interactive or args.dry_run:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-        else:
-            if result.get("success"):
-                if result.get("updated"):
-                    print("\n✓ 릴리즈 노트 업데이트 완료!")
-                    print("  기존 문서에 배포 이력 추가됨")
-                else:
-                    print("\n✓ 릴리즈 노트 생성 완료!")
-                print(f"  릴리즈 노트: {result.get('release_note_url')}")
-            else:
-                print(f"\n✗ 릴리즈 노트 생성 실패: {result.get('error')}")
+        # JSON 형태로 출력 (Claude가 파싱)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
 
         if not result.get("success"):
             sys.exit(1)

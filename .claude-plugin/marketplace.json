@@ -35,7 +35,7 @@
       "name": "smart-tag",
       "source": "./plugins/smart-tag",
       "description": "대화형 Git 태그 생성 및 릴리즈 노트 자동 작성. 커밋 선택부터 Confluence 문서 생성까지 한 번에",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "author": {
         "name": "SOL Team"
       },

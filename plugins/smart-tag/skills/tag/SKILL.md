@@ -258,12 +258,74 @@ git rev-list --count {이전태그}..{현재태그}
 git push origin {태그명}
 ```
 
-### 5. 릴리즈 노트 생성
+### 5. Confluence 페이지 검색 (반복적 탐색)
+
+Claude가 confluence 플러그인을 사용하여 적절한 릴리즈 노트 공간을 찾습니다.
+
+**Step 1: 서비스명으로 검색**
 
 ```bash
-# --prev-tag 옵션으로 커밋 범위 지정 가능
-# 대화형 모드로 실행하여 Confluence 페이지 선택을 사용자에게 확인
-python ${PLUGIN_DIR}/skills/tag/deployment.py create --tag {태그명} --prev-tag {이전태그}
+# confluence 플러그인으로 검색 (result_tree 포함)
+python ${CONFLUENCE_CLI} search "{서비스명} 릴리즈 노트" -l 10
+```
+
+**Step 2: 결과를 tree 형태로 사용자에게 표시**
+
+```
+📄 "{서비스명} 릴리즈 노트" 검색 결과:
+
+SOL 팀
+├── 텍스트/이미지탐지 API
+│   └── 상세 릴리즈 노트 (ID: 12340)
+└── 다른 서비스
+    └── 릴리즈 노트 (ID: 12350)
+
+이 중에서 선택하시겠어요? 또는 다른 키워드로 검색할까요?
+```
+
+**Step 3: 사용자 피드백에 따라 반복**
+
+- 사용자: "12340번 페이지로 해줘" → Step 4로 진행
+- 사용자: "SOL 팀 공간에서 더 찾아봐" → 해당 키워드로 재검색
+- 사용자: "릴리즈 노트로 검색해봐" → 새 키워드로 검색
+
+```bash
+# 추가 검색 예시
+python ${CONFLUENCE_CLI} search "SOL 팀" -l 10
+python ${CONFLUENCE_CLI} search "릴리즈 노트" -l 10
+```
+
+**Step 4: 페이지 확정 후 릴리즈 노트 생성**
+
+사용자가 페이지를 선택하면:
+
+```bash
+python ${PLUGIN_DIR}/skills/tag/deployment.py create \
+  --tag {태그명} \
+  --parent-page-id {선택된페이지ID} \
+  --prev-tag {이전태그}
+```
+
+**사용자와의 대화 예시:**
+
+```
+Claude: "{레포지토리명} 릴리즈 노트"로 Confluence를 검색할게요.
+
+[검색 결과 tree 표시]
+
+       이 중에서 릴리즈 노트를 생성할 페이지를 선택해주세요.
+       또는 다른 키워드로 검색하고 싶으시면 말씀해주세요.
+
+사용자: SOL 팀 공간에서 찾아봐
+
+Claude: "SOL 팀"으로 검색할게요.
+
+[새 검색 결과 tree 표시]
+
+사용자: 12340번 페이지로 해줘
+
+Claude: "상세 릴리즈 노트 (ID: 12340)" 페이지 하위에 릴리즈 노트를 생성합니다.
+       [릴리즈 노트 생성 진행]
 ```
 
 ## 문서 생성 위치
@@ -289,19 +351,20 @@ python ${PLUGIN_DIR}/skills/tag/deployment.py create --tag {태그명} --prev-ta
 스킬 대신 직접 deployment.py를 실행할 수도 있습니다:
 
 ```bash
-# 대화형 모드
-python deployment.py create --tag dev-v1.2.3
-python deployment.py create --tag v2.0.0
-python deployment.py create --tag 1.0.1
-
-# 자동 모드
-python deployment.py create --tag dev-v1.2.3 --no-interactive
-
-# Dry-run
-python deployment.py create --tag dev-v1.2.3 --dry-run
+# 기본 사용 (--tag, --parent-page-id 필수)
+python deployment.py create --tag dev-v1.2.3 --parent-page-id 12345
 
 # 이전 태그 지정
-python deployment.py create --tag v1.2.3 --prev-tag v1.2.0
+python deployment.py create --tag v1.2.3 --parent-page-id 12345 --prev-tag v1.2.0
+
+# Dry-run
+python deployment.py create --tag dev-v1.2.3 --parent-page-id 12345 --dry-run
+```
+
+**참고**: `--parent-page-id`는 필수입니다. 페이지 검색은 confluence 플러그인을 사용하세요:
+
+```bash
+python confluence.py search "릴리즈 노트" -l 10
 ```
 
 ## 참조

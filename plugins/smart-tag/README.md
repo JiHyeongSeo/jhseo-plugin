@@ -228,21 +228,17 @@ REPO_CONFIG = {
 Claude 없이 deployment.py를 직접 실행할 수도 있습니다:
 
 ```bash
-# 대화형 모드 (문서 생성 전 확인)
-python deployment.py create --tag dev-v1.2.3
-python deployment.py create --tag v2.0.0
-python deployment.py create --tag 1.0.1
-
-# 자동 모드 (확인 없이 바로 생성)
-python deployment.py create --tag dev-v1.2.3 --no-interactive
-
-# Dry-run (실제 생성하지 않고 미리보기)
-python deployment.py create --tag dev-v1.2.3 --dry-run
+# 기본 사용 (parent-page-id 필수)
+python deployment.py create --tag dev-v1.2.3 --parent-page-id 12345
 
 # 이전 태그 지정
-python deployment.py create --tag v1.2.3 --prev-tag v1.2.0
-python deployment.py create --tag dev-v1.2.3 --prev-tag dev-v1.2.2
+python deployment.py create --tag v1.2.3 --parent-page-id 12345 --prev-tag v1.2.0
+
+# Dry-run (실제 생성하지 않고 미리보기)
+python deployment.py create --tag dev-v1.2.3 --parent-page-id 12345 --dry-run
 ```
+
+**참고**: `--parent-page-id`는 필수입니다. Confluence 페이지 검색은 Claude가 confluence 플러그인을 사용하여 처리합니다.
 
 ## 문제 해결
 
@@ -340,6 +336,12 @@ Internal use only - SOL Team
 SOL Team
 
 ## 버전 히스토리
+
+- **1.0.7** (2026-02-05)
+  - deployment.py 단순화: 검색 로직 제거
+  - `--parent-page-id` 필수 인자로 변경
+  - Claude가 confluence 플러그인으로 직접 검색하여 페이지 선택
+  - 반복적 검색 플로우 지원 (사용자와 대화하며 적절한 공간 탐색)
 
 - **1.0.6** (2026-02-05)
   - Confluence 페이지 선택 시 대화형 확인 절차 추가
