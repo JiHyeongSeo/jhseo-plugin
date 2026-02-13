@@ -77,6 +77,45 @@ async def lookup(query, source="all"):
     return {"query": query or "", "count": len(results), "results": results}
 
 
+async def batch_lookup(ids, source="all"):
+    """여러 서비스 ID를 한 번에 조회하여 {id: name} 매핑 반환."""
+    id_set = set(ids)
+    mapping = {sid: "" for sid in ids}
+
+    async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+        if source in ("all", "bws"):
+            try:
+                r = await client.post(
+                    BWS_SERVICE_URL,
+                    headers={"x-inface-api-key": INFERENCE_API_KEY},
+                )
+                if r.status_code == 200:
+                    for svc in r.json().get("response", []):
+                        sid = str(svc.get("service_id", ""))
+                        if sid in id_set:
+                            mapping[sid] = svc.get("memo", "")
+            except Exception:
+                pass
+
+        if source in ("all", "nxlog"):
+            try:
+                r = await client.get(
+                    NXLOG_SERVICE_URL,
+                    auth=(NXLOG_SERVICE_USER, NXLOG_SERVICE_PASSWORD),
+                )
+                if r.status_code == 200:
+                    for svc in r.json():
+                        sid = str(svc.get("serviceID", ""))
+                        if sid in id_set and not mapping[sid]:
+                            game = svc.get("gameName", "")
+                            country = svc.get("countryName", "")
+                            mapping[sid] = f"{game} ({country})" if country else game
+            except Exception:
+                pass
+
+    return {"count": len(ids), "mapping": mapping}
+
+
 def main():
     if not NXLOG_SERVICE_USER or not NXLOG_SERVICE_PASSWORD:
         print(json.dumps({"error": "NXLOG_SERVICE_USER / NXLOG_SERVICE_PASSWORD not set"}))
@@ -93,11 +132,18 @@ def main():
     s.add_argument("--source", choices=["all", "nxlog", "bws"], default="all",
                    help="조회 소스 (all: 전체, nxlog: NXLOG만, bws: BWS/탐지API만)")
 
+    b = sp.add_parser("batch", help="여러 서비스 ID를 한 번에 조회")
+    b.add_argument("ids", nargs="+", help="서비스 ID 목록 (공백 구분)")
+    b.add_argument("--source", choices=["all", "nxlog", "bws"], default="all",
+                   help="조회 소스 (all: 전체, nxlog: NXLOG만, bws: BWS/탐지API만)")
+
     a = p.parse_args()
 
     if a.cmd == "search":
         query = " ".join(a.query) if a.query else ""
         r = asyncio.run(lookup(query, a.source))
+    elif a.cmd == "batch":
+        r = asyncio.run(batch_lookup(a.ids, a.source))
     else:
         r = {"error": f"Unknown command: {a.cmd}"}
 

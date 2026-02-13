@@ -25,6 +25,13 @@ description: 탐지 API 로그를 검색합니다
 python ${CLAUDE_PLUGIN_ROOT}/../service-lookup/service_lookup.py search "서비스명"
 ```
 
+## stats service 결과에 서비스명 붙이기
+
+`stats service` 결과의 서비스 ID들을 `batch` 명령으로 한 번에 조회하세요 (개별 조회 금지):
+```bash
+python ${CLAUDE_PLUGIN_ROOT}/../service-lookup/service_lookup.py batch ID1 ID2 ID3 ...
+```
+
 ## CLI 실행
 
 ```bash

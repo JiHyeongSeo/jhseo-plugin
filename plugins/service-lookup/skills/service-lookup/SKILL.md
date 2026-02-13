@@ -71,6 +71,25 @@ python ${CLAUDE_PLUGIN_ROOT}/service_lookup.py search "던전앤파이터" --sou
 python ${CLAUDE_PLUGIN_ROOT}/service_lookup.py search
 ```
 
+### 일괄 서비스 ID 조회 (batch)
+
+여러 서비스 ID의 서비스명을 한 번에 조회합니다. `stats service` 결과에서 서비스명을 붙일 때 유용합니다.
+
+```bash
+python ${CLAUDE_PLUGIN_ROOT}/service_lookup.py batch ID1 ID2 ID3 ... [--source all|nxlog|bws]
+```
+
+예시:
+```bash
+# 여러 서비스 ID를 한 번에 조회
+python ${CLAUDE_PLUGIN_ROOT}/service_lookup.py batch 10001 430011976 430011481 430011909
+
+# BWS에서만 조회
+python ${CLAUDE_PLUGIN_ROOT}/service_lookup.py batch 10001 430011976 --source bws
+```
+
+출력: `{"count": 4, "mapping": {"10001": "토이 커뮤니티", "430011976": "던전앤파이터 모바일 - 라이브", ...}}`
+
 ## 출력 해석 가이드
 
 결과 JSON의 각 항목:

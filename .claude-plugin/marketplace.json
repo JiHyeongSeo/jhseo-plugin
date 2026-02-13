@@ -46,7 +46,7 @@
       "name": "service-lookup",
       "source": "./plugins/service-lookup",
       "description": "서비스 ID 조회. NXLOG/BWS 서비스 ID를 게임명/메모로 검색",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": {
         "name": "SOL Team"
       },
