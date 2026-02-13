@@ -1,7 +1,7 @@
 {
   "name": "service-lookup",
   "description": "서비스 ID 조회. NXLOG 서비스 ID 및 BWS/탐지 API 서비스 ID를 게임명/메모로 검색",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": {
     "name": "SOL Team"
   },

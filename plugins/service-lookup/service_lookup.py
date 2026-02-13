@@ -89,14 +89,15 @@ def main():
     sp = p.add_subparsers(dest="cmd", required=True)
 
     s = sp.add_parser("search", help="서비스 ID 검색")
-    s.add_argument("query", nargs="?", default="", help="검색어 (게임명, 메모, 서비스ID)")
+    s.add_argument("query", nargs="*", default=[], help="검색어 (게임명, 메모, 서비스ID)")
     s.add_argument("--source", choices=["all", "nxlog", "bws"], default="all",
                    help="조회 소스 (all: 전체, nxlog: NXLOG만, bws: BWS/탐지API만)")
 
     a = p.parse_args()
 
     if a.cmd == "search":
-        r = asyncio.run(lookup(a.query, a.source))
+        query = " ".join(a.query) if a.query else ""
+        r = asyncio.run(lookup(query, a.source))
     else:
         r = {"error": f"Unknown command: {a.cmd}"}
 

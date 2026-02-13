@@ -29,6 +29,10 @@ export ES_PASSWORD="your-password"
 
 CLI 경로: `${CLAUDE_PLUGIN_ROOT}/detection_log.py`
 
+**중요:** CLI는 구조화된 옵션만 받습니다. 자연어 문장을 인자로 넘기지 마세요.
+- **올바른 사용:** `search -s 430011909 --type badword_kor --detected -n 10`
+- **잘못된 사용:** `search "서비스 430011909의 badword_kor 탐지된 로그 10개"`
+
 ### 로그 검색 (search)
 
 ```bash
