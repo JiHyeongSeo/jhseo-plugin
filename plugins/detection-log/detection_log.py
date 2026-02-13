@@ -94,6 +94,11 @@ async def search_logs(args):
     if getattr(args, "text", None):
         must.append({"match": {"request.body.data.text": args.text}})
 
+    if getattr(args, "detected", False):
+        type_name = getattr(args, "type", None)
+        if type_name:
+            filters.append({"range": {f"stat.{type_name}.infer_detect": {"gt": 0}}})
+
     sort_parts = args.sort.split(":")
     sort_field = sort_parts[0]
     sort_order = sort_parts[1] if len(sort_parts) > 1 else "desc"
@@ -262,6 +267,8 @@ def main():
     s.add_argument("--status", type=int)
     s.add_argument("--sort", default="@timestamp:desc")
     s.add_argument("--text")
+    s.add_argument("--detected", action="store_true",
+                   help="탐지된 로그만 필터 (--type 필수, stat.{type}.infer_detect > 0)")
 
     # stats
     st = sp.add_parser("stats")

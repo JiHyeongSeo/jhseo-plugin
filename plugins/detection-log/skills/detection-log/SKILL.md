@@ -46,6 +46,7 @@ python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search [옵션]
 - `-n/--size`: 결과 수 (기본: 20)
 - `--sort`: 정렬 (기본: `@timestamp:desc`)
 - `--text`: `request.body.data.text`에서 텍스트 검색
+- `--detected`: 탐지된 로그만 필터 (`--type` 필수, `stat.{type}.infer_detect > 0` 조건)
 
 예시:
 ```bash
@@ -66,6 +67,12 @@ python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search --type badword_kor
 
 # 에러 로그만 조회
 python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search --status 500
+
+# badword_kor로 실제 탐지된 로그만 조회 (infer_detect > 0)
+python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search --type badword_kor --detected -n 10
+
+# 특정 서비스에서 탐지된 로그만 조회
+python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search -s 430011909 --type badword_kor --detected -n 10 -f "now-24h"
 ```
 
 ### 통계 조회 (stats)

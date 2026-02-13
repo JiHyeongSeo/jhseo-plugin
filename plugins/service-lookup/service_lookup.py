@@ -14,7 +14,7 @@ NXLOG_SERVICE_USER = os.getenv("NXLOG_SERVICE_USER", "")
 NXLOG_SERVICE_PASSWORD = os.getenv("NXLOG_SERVICE_PASSWORD", "")
 
 BWS_SERVICE_URL = "https://private.api.nexon.com/inference_sidecar/service_list"
-BWS_SERVICE_API_KEY = os.getenv("BWS_SERVICE_API_KEY", "")
+INFERENCE_API_KEY = os.getenv("INFERENCE_API_KEY", "")
 
 
 async def lookup(query, source="all"):
@@ -54,7 +54,7 @@ async def lookup(query, source="all"):
             try:
                 r = await client.post(
                     BWS_SERVICE_URL,
-                    headers={"x-inface-api-key": BWS_SERVICE_API_KEY},
+                    headers={"x-inface-api-key": INFERENCE_API_KEY},
                 )
                 if r.status_code == 200:
                     for svc in r.json().get("response", []):
@@ -81,8 +81,8 @@ def main():
     if not NXLOG_SERVICE_USER or not NXLOG_SERVICE_PASSWORD:
         print(json.dumps({"error": "NXLOG_SERVICE_USER / NXLOG_SERVICE_PASSWORD not set"}))
         sys.exit(1)
-    if not BWS_SERVICE_API_KEY:
-        print(json.dumps({"error": "BWS_SERVICE_API_KEY not set"}))
+    if not INFERENCE_API_KEY:
+        print(json.dumps({"error": "INFERENCE_API_KEY not set"}))
         sys.exit(1)
 
     p = argparse.ArgumentParser(description="Service Lookup CLI")

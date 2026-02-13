@@ -20,7 +20,7 @@ description: 서비스 ID 조회. "서비스 ID", "service id", "서비스 검�
 ```bash
 export NXLOG_SERVICE_USER="your-nxlog-user"
 export NXLOG_SERVICE_PASSWORD="your-nxlog-password"
-export BWS_SERVICE_API_KEY="your-bws-api-key"
+export INFERENCE_API_KEY="your-inference-api-key"
 ```
 
 ## 데이터 소스
