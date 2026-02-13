@@ -123,7 +123,20 @@ async def search_logs(args):
         },
         "size": args.size,
         "sort": [{sort_field: {"order": sort_order}}],
-        "_source": [
+    }
+
+    # --detected + --type 사용 시 필요 필드만 요청 (출력량 대폭 감소)
+    detected = getattr(args, "detected", False)
+    type_name = getattr(args, "type", None)
+    if detected and type_name:
+        body["_source"] = [
+            "@timestamp",
+            "request.body.serviceId",
+            "request.body.data.text",
+            f"stat.{type_name}.infer_prediction",
+        ]
+    else:
+        body["_source"] = [
             "@timestamp",
             "request.path",
             "request.body.serviceId",
@@ -135,8 +148,7 @@ async def search_logs(args):
             "process_time",
             "region",
             "stat",
-        ],
-    }
+        ]
 
     async with httpx.AsyncClient(verify=False) as client:
         data, err = await _es_post(client, body)
@@ -227,12 +239,8 @@ async def stats_type(args):
             return err
         buckets = data.get("aggregations", {}).get("by_type", {}).get("buckets", [])
 
-        types_stats = []
-        for b in buckets:
-            type_name = b["key"]
-            total = b["doc_count"]
-
-            # stat 필드에서 . 을 포함한 중첩 경로로 조회
+        # 각 타입의 탐지 건수를 병렬로 조회
+        async def _detect_count(type_name):
             detect_filters = filters + [
                 {"term": {"request.body.types.keyword": type_name}},
                 {"range": {f"stat.{type_name}.infer_detect": {"gt": 0}}},
@@ -242,11 +250,19 @@ async def stats_type(args):
                 "size": 0,
                 "track_total_hits": True,
             }
-            d2, err2 = await _es_post(client, detect_body)
-            detected = _total(d2) if d2 else 0
+            d2, _ = await _es_post(client, detect_body)
+            return _total(d2) if d2 else 0
+
+        detect_counts = await asyncio.gather(
+            *[_detect_count(b["key"]) for b in buckets]
+        )
+
+        types_stats = []
+        for b, detected in zip(buckets, detect_counts):
+            total = b["doc_count"]
             rate = round(detected / total * 100, 2) if total > 0 else 0.0
             types_stats.append(
-                {"type": type_name, "total": total, "detected": detected, "rate_percent": rate}
+                {"type": b["key"], "total": total, "detected": detected, "rate_percent": rate}
             )
 
         return {"types": types_stats}
