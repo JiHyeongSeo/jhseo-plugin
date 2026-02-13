@@ -110,6 +110,11 @@ async def search_logs(args):
         if type_name:
             filters.append({"range": {f"stat.{type_name}.infer_detect": {"gt": 0}}})
 
+    if getattr(args, "undetected", False):
+        type_name = getattr(args, "type", None)
+        if type_name:
+            filters.append({"term": {f"stat.{type_name}.infer_detect": 0}})
+
     sort_parts = args.sort.split(":")
     sort_field = sort_parts[0]
     sort_order = sort_parts[1] if len(sort_parts) > 1 else "desc"
@@ -125,10 +130,11 @@ async def search_logs(args):
         "sort": [{sort_field: {"order": sort_order}}],
     }
 
-    # --detected + --type 사용 시 필요 필드만 요청 (출력량 대폭 감소)
+    # --detected/--undetected + --type 사용 시 필요 필드만 요청 (출력량 대폭 감소)
     detected = getattr(args, "detected", False)
+    undetected = getattr(args, "undetected", False)
     type_name = getattr(args, "type", None)
-    if detected and type_name:
+    if (detected or undetected) and type_name:
         body["_source"] = [
             "@timestamp",
             "request.body.serviceId",
@@ -156,8 +162,9 @@ async def search_logs(args):
             return err
         hits = data.get("hits", {}).get("hits", [])
 
-        # --detected + --type 사용 시 compact 출력 (탐지 텍스트+prediction만)
+        # --detected/--undetected + --type 사용 시 compact 출력
         detected = getattr(args, "detected", False)
+        undetected = getattr(args, "undetected", False)
         type_name = getattr(args, "type", None)
         if detected and type_name:
             compact = []
@@ -175,6 +182,28 @@ async def search_logs(args):
                         "timestamp": src.get("@timestamp", ""),
                         "service_id": _deep_get(src, "request.body.serviceId", ""),
                         "detected_texts": detected_items,
+                    })
+            return {
+                "total": _total(data),
+                "returned": len(compact),
+                "results": compact,
+            }
+
+        if undetected and type_name:
+            compact = []
+            for h in hits:
+                src = h.get("_source", {})
+                texts = _deep_get(src, "request.body.data.text", [])
+                preds = _deep_get(src, f"stat.{type_name}.infer_prediction", [])
+                items = []
+                for i, text in enumerate(texts if isinstance(texts, list) else [texts]):
+                    pred = preds[i] if isinstance(preds, list) and i < len(preds) else 0
+                    items.append({"text": text, "prediction": round(pred, 4) if isinstance(pred, (int, float)) else pred})
+                if items:
+                    compact.append({
+                        "timestamp": src.get("@timestamp", ""),
+                        "service_id": _deep_get(src, "request.body.serviceId", ""),
+                        "texts": items,
                     })
             return {
                 "total": _total(data),
@@ -323,6 +352,8 @@ def main():
     s.add_argument("--text")
     s.add_argument("--detected", action="store_true",
                    help="탐지된 로그만 필터 (--type 필수, stat.{type}.infer_detect > 0)")
+    s.add_argument("--undetected", action="store_true",
+                   help="미탐 로그만 필터 (--type 필수, stat.{type}.infer_detect == 0)")
 
     # stats
     st = sp.add_parser("stats")

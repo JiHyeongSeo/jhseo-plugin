@@ -13,6 +13,7 @@ description: 탐지 API 로그를 검색합니다
 | 사용자 요청 | CLI 변환 |
 |---|---|
 | "마비노기 모바일의 badword_kor 탐지된 텍스트 10개" | `search -s {serviceId} --type badword_kor --detected -n 10` |
+| "마비노기 모바일의 badword_kor 미탐 건수 100개" | `search -s {serviceId} --type badword_kor --undetected -n 100` |
 | "최근 24시간 서비스별 통계" | `stats service -f "now-24h"` |
 | "badword_kor 탐지율" | `stats type --type badword_kor` |
 | "최근 7일 시간대별 추이" | `stats timeline -f "now-7d"` |

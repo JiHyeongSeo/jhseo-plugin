@@ -51,6 +51,7 @@ python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search [옵션]
 - `--sort`: 정렬 (기본: `@timestamp:desc`)
 - `--text`: `request.body.data.text`에서 텍스트 검색
 - `--detected`: 탐지된 로그만 필터 (`--type` 필수, `stat.{type}.infer_detect > 0` 조건)
+- `--undetected`: 미탐 로그만 필터 (`--type` 필수, `stat.{type}.infer_detect == 0` 조건)
 
 예시:
 ```bash
@@ -77,6 +78,12 @@ python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search --type badword_kor --detect
 
 # 특정 서비스에서 탐지된 로그만 조회
 python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search -s 430011909 --type badword_kor --detected -n 10 -f "now-24h"
+
+# badword_kor 미탐(탐지되지 않은) 로그 조회
+python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search --type badword_kor --undetected -n 10
+
+# 특정 서비스에서 미탐 로그만 조회
+python ${CLAUDE_PLUGIN_ROOT}/detection_log.py search -s 430011909 --type badword_kor --undetected -n 50 -f "now-24h"
 ```
 
 ### 통계 조회 (stats)
@@ -165,6 +172,7 @@ python ${CLAUDE_PLUGIN_ROOT}/detection_log.py stats timeline -f "now-24h" -s 400
 
 - **search 결과**: 각 결과의 `@timestamp`, `serviceId`, `types`, `text`, `process_time`, `status`를 표 형태로 정리. 텍스트가 길면 축약.
 - **search --detected 결과**: compact 형식으로 `timestamp`, `service_id`, `detected_texts`(탐지된 텍스트+prediction만) 반환. 전체 stat 객체가 제거되어 출력이 간결함. 바로 테이블로 표시.
+- **search --undetected 결과**: compact 형식으로 `timestamp`, `service_id`, `texts`(전체 텍스트+prediction) 반환. 미탐(infer_detect==0) 로그만 포함.
 - **stats service**: serviceId별 호출 수를 내림차순 테이블로 표시.
 - **stats type**: 타입별 `total`(총 호출), `detected`(탐지), `rate_percent`(탐지율%)를 테이블로 표시.
 - **stats timeline**: 시간 구간별 호출 수를 시간순으로 표시.
