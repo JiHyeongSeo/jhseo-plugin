@@ -35,7 +35,7 @@
       "name": "detection-log",
       "source": "./plugins/detection-log",
       "description": "Elasticsearch 탐지 로그 조회. 텍스트/이미지 탐지 API 호출 로그 검색 및 통계 분석",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": {
         "name": "SOL Team"
       },

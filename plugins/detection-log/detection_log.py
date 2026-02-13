@@ -88,6 +88,17 @@ def _total(data):
     return t.get("value", 0) if isinstance(t, dict) else t
 
 
+def _deep_get(d, path, default=None):
+    """점으로 구분된 경로로 중첩 dict에서 값을 가져온다."""
+    keys = path.split(".")
+    for k in keys:
+        if isinstance(d, dict):
+            d = d.get(k, default)
+        else:
+            return default
+    return d
+
+
 async def search_logs(args):
     filters = build_filters(args)
     must = []
@@ -132,6 +143,33 @@ async def search_logs(args):
         if err:
             return err
         hits = data.get("hits", {}).get("hits", [])
+
+        # --detected + --type 사용 시 compact 출력 (탐지 텍스트+prediction만)
+        detected = getattr(args, "detected", False)
+        type_name = getattr(args, "type", None)
+        if detected and type_name:
+            compact = []
+            for h in hits:
+                src = h.get("_source", {})
+                texts = _deep_get(src, "request.body.data.text", [])
+                preds = _deep_get(src, f"stat.{type_name}.infer_prediction", [])
+                detected_items = []
+                for i, pred in enumerate(preds):
+                    if isinstance(pred, (int, float)) and pred >= 0.8:
+                        text = texts[i] if i < len(texts) else ""
+                        detected_items.append({"text": text, "prediction": round(pred, 4)})
+                if detected_items:
+                    compact.append({
+                        "timestamp": src.get("@timestamp", ""),
+                        "service_id": _deep_get(src, "request.body.serviceId", ""),
+                        "detected_texts": detected_items,
+                    })
+            return {
+                "total": _total(data),
+                "returned": len(compact),
+                "results": compact,
+            }
+
         return {
             "total": _total(data),
             "returned": len(hits),
