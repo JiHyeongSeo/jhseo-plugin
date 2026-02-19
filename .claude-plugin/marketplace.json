@@ -13,11 +13,18 @@
       "name": "confluence",
       "source": "./plugins/confluence",
       "description": "Confluence 페이지 검색/조회/생성/수정. 유해탐지팀 컨플루언스 문서 관리용",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": {
         "name": "SOL Team"
       },
-      "keywords": ["confluence", "documentation", "wiki"],
+      "keywords": [
+        "confluence",
+        "documentation",
+        "wiki",
+        "컨플루언스",
+        "컨플",
+        "문서"
+      ],
       "category": "productivity"
     },
     {
@@ -28,7 +35,14 @@
       "author": {
         "name": "SOL Team"
       },
-      "keywords": ["code-review", "git", "security", "performance", "코드리뷰", "auto-fix"],
+      "keywords": [
+        "code-review",
+        "git",
+        "security",
+        "performance",
+        "코드리뷰",
+        "auto-fix"
+      ],
       "category": "development"
     },
     {
