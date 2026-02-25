@@ -66,17 +66,6 @@
       },
       "keywords": ["service", "serviceid", "서비스", "게임", "lookup"],
       "category": "utility"
-    },
-    {
-      "name": "interactive-review",
-      "source": "./plugins/interactive-review",
-      "description": "웹 기반 인터랙티브 질문/Plan 리뷰 UI. 여러 질문을 한 화면에 표시하거나 Plan을 GitHub PR 리뷰 스타일로 검토",
-      "version": "1.0.0",
-      "author": {
-        "name": "SOL Team"
-      },
-      "keywords": ["interactive", "review", "questions", "plan", "web-ui", "질문", "리뷰"],
-      "category": "utility"
     }
   ]
 }
