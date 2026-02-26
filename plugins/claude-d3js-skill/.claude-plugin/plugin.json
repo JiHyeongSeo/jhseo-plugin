@@ -1,0 +1,19 @@
+{
+  "name": "d3js",
+  "description": "D3.js 데이터 시각화 라이브러리 플러그인화",
+  "version": "1.0.0",
+  "author": {
+    "name": "SOL Team"
+  },
+  "homepage": "https://github.com/chrisvoncsefalvay/claude-d3js-skill",
+  "repository": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git",
+  "keywords": [
+    "d3",
+    "d3js",
+    "visualization",
+    "chart",
+    "차트",
+    "시각화",
+    "데이터시각화"
+  ]
+}

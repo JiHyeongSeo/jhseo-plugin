@@ -66,6 +66,25 @@
       },
       "keywords": ["service", "serviceid", "서비스", "게임", "lookup"],
       "category": "utility"
+    },
+    {
+      "name": "service-lookup",
+      "source": "./plugins/claude-d3js-skill",
+      "description": "D3.js 데이터 시각화 라이브러리 플러그인화",
+      "version": "1.0.0",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": [
+        "d3",
+        "d3js",
+        "visualization",
+        "chart",
+        "차트",
+        "시각화",
+        "데이터시각화"
+      ],
+      "category": "development"
     }
   ]
 }
