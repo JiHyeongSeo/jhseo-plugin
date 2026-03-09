@@ -68,7 +68,7 @@
       "category": "utility"
     },
     {
-      "name": "service-lookup",
+      "name": "d3js",
       "source": "./plugins/claude-d3js-skill",
       "description": "D3.js 데이터 시각화 라이브러리 플러그인화",
       "version": "1.0.0",
