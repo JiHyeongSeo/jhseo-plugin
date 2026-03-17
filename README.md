@@ -1,8 +1,40 @@
-# SOL Team Claude Code Plugins
+# SOL Team AI Agent Plugins (Claude Code & Gemini CLI)
 
-SOL 팀에서 사용하는 Claude Code 플러그인 모음입니다.
+SOL 팀에서 사용하는 AI Agent (Claude Code, Gemini CLI) 플러그인 모음입니다.
 
-## 설치 방법
+## 🚀 Gemini CLI 설치 방법
+
+Gemini CLI에서는 이 레포지토리를 로컬에 클론한 뒤, 내부의 스킬 폴더들을 직접 설치하는 방식으로 사용합니다.
+
+### 1. 레포지토리 클론
+```bash
+git clone https://gitlab.nexon.com/da_div/SOL/claude-plugins.git ~/workspace/claude-plugins
+```
+
+### 2. 전체 스킬 설치하기
+
+**옵션 A: 한 번에 설치 (One-liner)**
+클론 받은 폴더로 이동한 후 아래 명령어를 실행하면 모든 플러그인이 `user` 스코프(전역)로 일괄 설치됩니다.
+```bash
+cd ~/workspace/claude-plugins && for d in plugins/*/; do gemini skills install "$d" --scope user; done
+```
+
+**옵션 B: 개별 설치 (한 줄씩)**
+원하는 스킬만 선택해서 설치하거나 일괄 명령어가 동작하지 않는 환경이라면, 클론 받은 폴더 내에서 아래 명령어를 하나씩 실행하세요.
+```bash
+cd ~/workspace/claude-plugins
+gemini skills install ./plugins/claude-d3js-skill --scope user
+gemini skills install ./plugins/code-review --scope user
+gemini skills install ./plugins/confluence --scope user
+gemini skills install ./plugins/detection-log --scope user
+gemini skills install ./plugins/service-lookup --scope user
+```
+
+*(설치 후 Gemini CLI 내에서 `/skills reload` 명령어를 입력하면 즉시 적용됩니다.)*
+
+---
+
+## 🤖 Claude Code 설치 방법
 
 ### 1. 마켓플레이스 추가
 
