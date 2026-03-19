@@ -429,6 +429,116 @@ Midnight 권장 (어두운 배경)
 - 테이블 없이 나열식 정보 작성
 - 섹션 간 공백 없이 빽빽하게 작성
 
+## 22. draw.io 다이어그램
+
+Confluence에 draw.io 다이어그램을 삽입하려면 **첨부파일 3개 업로드 + 매크로 삽입**이 필요합니다.
+
+### 첨부파일 구조 (3개 필수)
+
+다이어그램 하나당 아래 3개 파일을 페이지에 첨부해야 합니다:
+
+| 파일명 | mediaType | comment | 설명 |
+|--------|-----------|---------|------|
+| `{diagramName}` | `application/vnd.jgraph.mxfile` | `draw.io diagram` | 메인 다이어그램 XML |
+| `{diagramName}.png` | `image/png` | `{diagramName} exported to image` | 미리보기 이미지 (1x1 placeholder PNG 가능) |
+| `~{diagramName}.tmp` | `application/xml` | `draw.io Draft` | 드래프트 (메인 XML과 동일 내용) |
+
+**주의:**
+- `diagramName`에는 `.drawio` 확장자를 **포함하지 않음** (예: `my-diagram`, NOT `my-diagram.drawio`)
+- mediaType이 정확해야 함. 특히 메인 파일은 반드시 `application/vnd.jgraph.mxfile`
+- `.png`는 placeholder(1x1 투명 PNG)로도 동작함 — draw.io 플러그인이 첫 조회/편집 시 자동 갱신
+
+### 매크로 형식
+
+```xml
+<ac:structured-macro ac:name="drawio">
+  <ac:parameter ac:name="border">true</ac:parameter>
+  <ac:parameter ac:name="diagramName">{diagramName}</ac:parameter>
+  <ac:parameter ac:name="simpleViewer">false</ac:parameter>
+  <ac:parameter ac:name="width">{width}</ac:parameter>
+  <ac:parameter ac:name="links">auto</ac:parameter>
+  <ac:parameter ac:name="tbstyle">top</ac:parameter>
+  <ac:parameter ac:name="lbox">true</ac:parameter>
+  <ac:parameter ac:name="diagramWidth">{width}</ac:parameter>
+  <ac:parameter ac:name="revision">1</ac:parameter>
+</ac:structured-macro>
+```
+
+- `diagramName`: 첨부파일명과 **정확히 일치** (확장자 없음)
+- `width` / `diagramWidth`: 표시 너비 (px). 보통 800~1100
+- `revision`: 첨부파일 업데이트 시 증가
+
+### draw.io XML 포맷 (mxGraph)
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile>
+  <diagram name="Diagram Name" id="unique-id">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1"
+                  tooltips="1" connect="1" arrows="1" fold="1" page="1"
+                  pageScale="1" pageWidth="1200" pageHeight="800"
+                  math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <!-- 노드 -->
+        <mxCell id="n1" value="텍스트" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="100" y="100" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <!-- 엣지 -->
+        <mxCell id="e1" style="strokeWidth=2;" edge="1" source="n1" target="n2" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+```
+
+### 자주 사용하는 노드 스타일
+
+| 용도 | style |
+|------|-------|
+| 일반 박스 (파란) | `rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;` |
+| 강조 박스 (빨간) | `rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=3;` |
+| 성공/완료 (초록) | `rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;` |
+| 경고/대기 (노랑) | `rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;` |
+| 판단/분기 (보라) | `shape=mxgraph.flowchart.decision;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;` |
+| 비활성 (회색) | `rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#666666;` |
+| 시작/끝 (타원) | `shape=ellipse;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;` |
+| DB (실린더) | `shape=cylinder3;whiteSpace=wrap;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#dae8fc;strokeColor=#6c8ebf;` |
+
+### 전체 작업 순서
+
+1. draw.io XML 작성 (mxGraph 포맷)
+2. 페이지에 첨부파일 3개 업로드 (API reference의 "첨부파일 업로드" 참조)
+3. 페이지 본문에 drawio 매크로 삽입
+4. 페이지 저장/업데이트
+
+## 23. 고품질 UI/UX 다이어그램 설계 가이드라인 (draw.io)
+
+비개발자나 기획자도 쉽게 아키텍처와 흐름을 이해할 수 있도록, draw.io 다이어그램 생성 시 다음 UI/UX 설계 원칙을 준수해야 합니다.
+
+### 가시성 및 시각적 계층 구조 (Visual Hierarchy)
+사용자 영역, 내부 시스템, 외부 연동 시스템, 데이터베이스를 명확한 색상 규칙으로 분리하여 인지 부하를 줄입니다.
+*   **사용자/클라이언트:** 녹색 계열 (`#d5e8d4`)
+*   **핵심 시스템/API:** 파란색 계열 (`#dae8fc`)
+*   **외부 서비스/서드파티:** 노란색 계열 (`#fff2cc`)
+*   **데이터베이스/저장소:** 보라색 계열 (`#e1d5e7`)
+
+### 비개발자 친화적 표현 (Non-Developer Friendly)
+*   **명확한 액션 기반 레이블:** 단순한 API 엔드포인트명(`POST /api/v1/upload`) 대신, 행위 중심의 명확한 문장(`1. 이미지 업로드 요청`)으로 엣지(Edge)를 레이블링합니다.
+*   **시간 흐름에 따른 번호 매기기:** 복잡한 흐름은 번호(1, 2, 3...)를 매겨 시계열적 순서를 직관적으로 표현합니다.
+
+### 아이콘 및 시각적 노드 활용
+*   단순 사각형(Rectangle) 노드만 나열하는 것을 지양합니다.
+*   역할에 맞는 형태를 적극 사용합니다 (예: 사용자는 User 아이콘/Ellipse, DB는 Cylinder 형상 등).
+*   **아이콘 스타일 노드 예시:** 텍스트와 함께 시각적 단서를 제공하여 노드의 성격을 바로 파악할 수 있게 구성합니다.
+
+### 그룹핑 및 스윔레인 (Swimlanes / Grouping)
+*   시스템 경계(네트워크 경계, VPC, 서비스 도메인 등)는 점선 테두리를 가진 큰 박스로 묶어 구역을 명확히 시각화합니다.
+*   **그룹 노드 스타일 예:** `rounded=1;whiteSpace=wrap;fillColor=none;strokeColor=#b85450;strokeWidth=2;dashed=1;`
+
 ## 기존 문서 수정 시
 
 기존 Confluence 문서를 수정할 때: 문서의 핵심 내용(텍스트, 정보)은 그대로 유지하고, 스타일(레이아웃, 헤더, 아이콘, 테이블 형식 등)만 이 가이드에 맞게 변경하세요.

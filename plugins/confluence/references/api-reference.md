@@ -211,6 +211,76 @@ curl -s -H "Authorization: Bearer $CONFLUENCE_API_TOKEN" \
   "https://confluence.nexon.com/rest/api/content?spaceKey=NAD&limit=25&expand=space,ancestors"
 ```
 
+### 7. 첨부파일 업로드
+
+**POST** `/rest/api/content/{pageId}/child/attachment`
+
+페이지에 파일을 첨부합니다. draw.io 다이어그램, 이미지 등을 업로드할 때 사용합니다.
+
+**Headers:**
+| 헤더 | 값 | 비고 |
+|------|-----|------|
+| Authorization | `Bearer $CONFLUENCE_API_TOKEN` | 인증 |
+| X-Atlassian-Token | `nocheck` | XSRF 보호 우회 (필수) |
+
+**주의:** `Content-Type`은 설정하지 않음 (multipart/form-data가 자동 설정됨)
+
+**Body:** `multipart/form-data`
+| 필드 | 설명 |
+|------|------|
+| file | 업로드할 파일 (filename, content, mediaType) |
+| comment | 첨부파일 코멘트 (선택) |
+
+**curl 예시:**
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $CONFLUENCE_API_TOKEN" \
+  -H "X-Atlassian-Token: nocheck" \
+  -F "file=@diagram.drawio;type=application/vnd.jgraph.mxfile" \
+  -F "comment=draw.io diagram" \
+  "https://confluence.nexon.com/rest/api/content/{pageId}/child/attachment"
+```
+
+**Python 예시:**
+```python
+import requests
+
+url = f"https://confluence.nexon.com/rest/api/content/{page_id}/child/attachment"
+headers = {
+    "Authorization": f"Bearer {token}",
+    "X-Atlassian-Token": "nocheck",
+}
+files = {"file": (filename, content_bytes, media_type)}
+data = {"comment": "draw.io diagram"}
+r = requests.post(url, headers=headers, files=files, data=data)
+```
+
+### 8. 첨부파일 업데이트
+
+**POST** `/rest/api/content/{pageId}/child/attachment/{attachmentId}/data`
+
+기존 첨부파일의 내용을 새 버전으로 업데이트합니다.
+
+**Headers/Body:** 첨부파일 업로드와 동일
+
+### 9. 첨부파일 삭제
+
+**DELETE** `/rest/api/content/{attachmentId}`
+
+첨부파일을 삭제합니다.
+
+### 10. 첨부파일 목록 조회
+
+**GET** `/rest/api/content/{pageId}/child/attachment`
+
+페이지에 첨부된 파일 목록을 조회합니다.
+
+**Query Parameters:**
+| 파라미터 | 설명 | 예시 |
+|----------|------|------|
+| expand | 확장할 필드 | `version,metadata` |
+| limit | 최대 결과 수 | `50` |
+
 ## 응답 상태 코드
 
 | 코드 | 설명 |

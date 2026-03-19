@@ -14,6 +14,7 @@ Confluence 페이지를 검색, 조회, 생성, 수정하는 스킬입니다.
 - "문서 생성", "페이지 생성", "페이지 만들"
 - "페이지 검색", "문서 검색"
 - "배포 문서", "배포 노트", "패치 노트"
+- "draw.io", "drawio", "다이어그램"
 
 ## 환경 설정
 
@@ -86,9 +87,70 @@ python ${CLAUDE_PLUGIN_ROOT}/confluence.py update {pageId} -t "새 제목" -c "<
 2. **본문:** deployment 템플릿 사용
    - 템플릿 변수(배포 일시, 버전, 담당자, 변경 사항, 배포 절차 등)를 채워 넣어 템플릿 구조 준수
 
+## draw.io 다이어그램 삽입
+
+Confluence 페이지에 draw.io 다이어그램을 삽입할 때는 **반드시** 아래 절차를 따릅니다.
+상세 스타일/XML 포맷은 `references/style-guide.md`의 "22. draw.io 다이어그램" 및 "23. 고품질 UI/UX 다이어그램 설계 가이드라인" 섹션을 참고하세요.
+**주의:** 다이어그램 생성 시 반드시 비개발자가 이해하기 쉽도록 고품질 UI/UX 다이어그램 설계 가이드라인을 준수해야 합니다. (아이콘 노드 활용, 직관적 흐름도 번호 부여, 일관된 색상 및 스윔레인 적용)
+
+### 핵심 규칙
+
+1. **첨부파일 3개** 업로드 필수 (다이어그램 하나당):
+   - `{diagramName}` — mediaType: `application/vnd.jgraph.mxfile` (메인)
+   - `{diagramName}.png` — mediaType: `image/png` (미리보기, placeholder 가능)
+   - `~{diagramName}.tmp` — mediaType: `application/xml` (드래프트)
+2. **매크로**: `diagramName`은 첨부파일명과 **정확히 일치** (확장자 없음)
+3. **매크로 필수 파라미터**: `border`, `diagramName`, `simpleViewer`, `width`, `links`, `tbstyle`, `lbox`, `diagramWidth`, `revision`
+
+### 작업 순서
+
+```
+1. draw.io XML(mxGraph 포맷) 작성
+2. REST API로 첨부파일 3개 업로드 (api-reference.md "첨부파일 업로드" 참조)
+3. 페이지 본문에 drawio 매크로 삽입
+4. 페이지 저장/업데이트
+```
+
+### 첨부파일 업로드 (Python)
+
+```python
+import requests
+
+CONFLUENCE_BASE = "https://confluence.nexon.com"
+HEADERS = {"Authorization": f"Bearer {token}", "X-Atlassian-Token": "nocheck"}
+
+def upload(page_id, filename, content_bytes, media_type, comment=""):
+    url = f"{CONFLUENCE_BASE}/rest/api/content/{page_id}/child/attachment"
+    files = {"file": (filename, content_bytes, media_type)}
+    data = {"comment": comment} if comment else {}
+    return requests.post(url, headers=HEADERS, files=files, data=data)
+
+# 다이어그램 하나당 3개 업로드
+xml_bytes = diagram_xml.encode("utf-8")
+upload(page_id, "my-diagram", xml_bytes, "application/vnd.jgraph.mxfile", "draw.io diagram")
+upload(page_id, "my-diagram.png", placeholder_png_bytes, "image/png", "my-diagram exported to image")
+upload(page_id, "~my-diagram.tmp", xml_bytes, "application/xml", "draw.io Draft")
+```
+
+### 매크로 삽입
+
+```xml
+<ac:structured-macro ac:name="drawio">
+  <ac:parameter ac:name="border">true</ac:parameter>
+  <ac:parameter ac:name="diagramName">my-diagram</ac:parameter>
+  <ac:parameter ac:name="simpleViewer">false</ac:parameter>
+  <ac:parameter ac:name="width">900</ac:parameter>
+  <ac:parameter ac:name="links">auto</ac:parameter>
+  <ac:parameter ac:name="tbstyle">top</ac:parameter>
+  <ac:parameter ac:name="lbox">true</ac:parameter>
+  <ac:parameter ac:name="diagramWidth">900</ac:parameter>
+  <ac:parameter ac:name="revision">1</ac:parameter>
+</ac:structured-macro>
+```
+
 ## 참조 문서
 
 스타일 가이드 및 템플릿은 references/ 폴더를 참고하세요:
-- `references/api-reference.md` - API 엔드포인트 상세
-- `references/style-guide.md` - Confluence 문서 스타일 가이드
+- `references/api-reference.md` - API 엔드포인트 상세 (첨부파일 업로드 포함)
+- `references/style-guide.md` - Confluence 문서 스타일 가이드 (draw.io 포맷 포함)
 - `references/templates/` - 문서 템플릿들
