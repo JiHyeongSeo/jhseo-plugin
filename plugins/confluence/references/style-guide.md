@@ -542,3 +542,12 @@ Confluence에 draw.io 다이어그램을 삽입하려면 **첨부파일 3개 업
 ## 기존 문서 수정 시
 
 기존 Confluence 문서를 수정할 때: 문서의 핵심 내용(텍스트, 정보)은 그대로 유지하고, 스타일(레이아웃, 헤더, 아이콘, 테이블 형식 등)만 이 가이드에 맞게 변경하세요.
+
+## 24. 다이어그램 유형별 Best Practice
+
+**별도 파일로 분리:** `references/drawio-guide.md` 참고
+
+다이어그램 유형별 Shape, 색상, 레이아웃, 예제 XML은 `drawio-guide.md`에서 확인하세요:
+- ERD, Flowchart, Sequence, Architecture, BPMN, State, Network/Infra (7종)
+- 스텐실 & 커스텀 아이콘 가이드
+- 공통 레이아웃 & 엣지 패턴, 파스텔 색상 팔레트

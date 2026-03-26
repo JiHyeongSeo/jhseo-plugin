@@ -90,7 +90,10 @@ python ${CLAUDE_PLUGIN_ROOT}/confluence.py update {pageId} -t "새 제목" -c "<
 ## draw.io 다이어그램 삽입
 
 Confluence 페이지에 draw.io 다이어그램을 삽입할 때는 **반드시** 아래 절차를 따릅니다.
-상세 스타일/XML 포맷은 `references/style-guide.md`의 "22. draw.io 다이어그램" 및 "23. 고품질 UI/UX 다이어그램 설계 가이드라인" 섹션을 참고하세요.
+상세 스타일/XML 포맷은 아래 문서를 참고하세요:
+- `references/style-guide.md` 섹션 22-23: draw.io 기본 포맷, Confluence 삽입 방법, UI/UX 설계 가이드라인
+- `references/drawio-guide.md`: 다이어그램 유형별 Best Practice (ERD, Flowchart, Sequence, Architecture, BPMN, State, Network), 스텐실/커스텀 아이콘, 공통 레이아웃/엣지 패턴, 파스텔 색상 팔레트
+
 **주의:** 다이어그램 생성 시 반드시 비개발자가 이해하기 쉽도록 고품질 UI/UX 다이어그램 설계 가이드라인을 준수해야 합니다. (아이콘 노드 활용, 직관적 흐름도 번호 부여, 일관된 색상 및 스윔레인 적용)
 
 ### 핵심 규칙
