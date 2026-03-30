@@ -214,6 +214,54 @@ async def update(page_id, title=None, content=None):
         return {"success": True, "id": page_id}
 
 
+async def label_add(page_id, label_name):
+    async with httpx.AsyncClient() as c:
+        r = await c.get(f"{CONFLUENCE_URL}/rest/api/content/{page_id}", headers=get_auth_header(),
+                        params={"expand": "ancestors"})
+        if r.status_code != 200:
+            return {"error": r.status_code}
+        d = r.json()
+        if not is_allowed(page_id, d.get("ancestors", [])):
+            return {"error": "not allowed"}
+        r = await c.post(f"{CONFLUENCE_URL}/rest/api/content/{page_id}/label", headers=get_auth_header(),
+                         json=[{"prefix": "global", "name": label_name}])
+        if r.status_code not in (200, 201):
+            return {"error": r.status_code, "detail": r.text}
+        return {"success": True, "id": page_id, "label": label_name}
+
+
+async def label_remove(page_id, label_name):
+    async with httpx.AsyncClient() as c:
+        r = await c.get(f"{CONFLUENCE_URL}/rest/api/content/{page_id}", headers=get_auth_header(),
+                        params={"expand": "ancestors"})
+        if r.status_code != 200:
+            return {"error": r.status_code}
+        d = r.json()
+        if not is_allowed(page_id, d.get("ancestors", [])):
+            return {"error": "not allowed"}
+        r = await c.delete(f"{CONFLUENCE_URL}/rest/api/content/{page_id}/label/{label_name}",
+                           headers=get_auth_header())
+        if r.status_code not in (200, 204):
+            return {"error": r.status_code, "detail": r.text}
+        return {"success": True, "id": page_id, "label": label_name}
+
+
+async def label_list(page_id):
+    async with httpx.AsyncClient() as c:
+        r = await c.get(f"{CONFLUENCE_URL}/rest/api/content/{page_id}", headers=get_auth_header(),
+                        params={"expand": "ancestors"})
+        if r.status_code != 200:
+            return {"error": r.status_code}
+        d = r.json()
+        if not is_allowed(page_id, d.get("ancestors", [])):
+            return {"error": "not allowed"}
+        r = await c.get(f"{CONFLUENCE_URL}/rest/api/content/{page_id}/label", headers=get_auth_header())
+        if r.status_code != 200:
+            return {"error": r.status_code, "detail": r.text}
+        labels = [{"name": lb.get("name"), "prefix": lb.get("prefix")} for lb in r.json().get("results", [])]
+        return {"id": page_id, "labels": labels, "total": len(labels)}
+
+
 async def tree(space="NAD"):
     async with httpx.AsyncClient() as c:
         r = await c.get(f"{CONFLUENCE_URL}/rest/api/content", headers=get_auth_header(),
@@ -252,11 +300,20 @@ def main():
     c = sp.add_parser("create"); c.add_argument("-s", "--space", default="NAD"); c.add_argument("-t", "--title", required=True); c.add_argument("-c", "--content", required=True); c.add_argument("-p", "--parent")
     u = sp.add_parser("update"); u.add_argument("page_id"); u.add_argument("-t", "--title"); u.add_argument("-c", "--content")
     sp.add_parser("tree").add_argument("-s", "--space", default="NAD")
+    lb = sp.add_parser("label")
+    lb_sp = lb.add_subparsers(dest="label_cmd", required=True)
+    lb_add = lb_sp.add_parser("add"); lb_add.add_argument("page_id"); lb_add.add_argument("label_name")
+    lb_rm = lb_sp.add_parser("remove"); lb_rm.add_argument("page_id"); lb_rm.add_argument("label_name")
+    lb_ls = lb_sp.add_parser("list"); lb_ls.add_argument("page_id")
     a = p.parse_args()
     if a.cmd == "search": r = asyncio.run(search(a.query, a.space, a.limit))
     elif a.cmd == "get": r = asyncio.run(get_page(a.page_id))
     elif a.cmd == "create": r = asyncio.run(create(a.space, a.title, a.content, a.parent))
     elif a.cmd == "update": r = asyncio.run(update(a.page_id, a.title, a.content))
+    elif a.cmd == "label":
+        if a.label_cmd == "add": r = asyncio.run(label_add(a.page_id, a.label_name))
+        elif a.label_cmd == "remove": r = asyncio.run(label_remove(a.page_id, a.label_name))
+        else: r = asyncio.run(label_list(a.page_id))
     else: r = asyncio.run(tree(a.space))
     print(json.dumps(r, ensure_ascii=False, indent=2))
 

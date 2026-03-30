@@ -1,6 +1,6 @@
 ---
 name: confluence
-description: Confluence 페이지 검색/조회/생성/수정. "confluence", "컨플루언스", "컨플", "문서 생성", "페이지 검색", "배포 노트" 등의 키워드에서 활성화
+description: Confluence 페이지 검색/조회/생성/수정. "confluence", "컨플루언스", "컨플", "문서 생성", "페이지 검색", "배포 노트", "아키텍처", "회의록", "트러블슈팅", "ADR", "라벨" 등의 키워드에서 활성화
 ---
 
 # Confluence 스킬
@@ -15,6 +15,11 @@ Confluence 페이지를 검색, 조회, 생성, 수정하는 스킬입니다.
 - "페이지 검색", "문서 검색"
 - "배포 문서", "배포 노트", "패치 노트"
 - "draw.io", "drawio", "다이어그램"
+- "아키텍처", "설계 문서", "시스템 구조"
+- "회의록", "미팅 노트"
+- "트러블슈팅", "장애 기록", "이슈 기록"
+- "ADR", "의사결정"
+- "라벨", "태그"
 
 ## 환경 설정
 
@@ -77,6 +82,44 @@ python ${CLAUDE_PLUGIN_ROOT}/confluence.py create -t "제목" -c "<p>내용</p>"
 ```bash
 python ${CLAUDE_PLUGIN_ROOT}/confluence.py update {pageId} -t "새 제목" -c "<p>새 내용</p>"
 ```
+
+### 라벨 관리
+```bash
+python ${CLAUDE_PLUGIN_ROOT}/confluence.py label add {pageId} {labelName}
+python ${CLAUDE_PLUGIN_ROOT}/confluence.py label remove {pageId} {labelName}
+python ${CLAUDE_PLUGIN_ROOT}/confluence.py label list {pageId}
+```
+
+## 문서 생성 시 자동 삽입 규칙
+
+문서를 생성할 때 다음 규칙을 자동으로 적용합니다:
+
+1. **제목 규칙**: 모든 문서 제목은 `(YYYY/MM/DD) 제목` 형식. ADR은 `(YYYY/MM/DD) ADR-{번호}: {요약}`
+2. **요약 필수**: 모든 문서 최상단에 tip 패널로 3줄 이내 요약 (한 줄 결론 + 핵심 숫자)
+3. **Easy Heading Free 삽입**: 모든 문서에 상단에 Easy Heading Free 매크로 삽입 (오른쪽 사이드바 네비게이션, `navigationExpandOption=expand-all-by-default`)
+4. **라벨 자동 부여**: 문서 유형에 따라 `sol-` prefix 라벨을 자동 부여
+   - 배포 문서 → `sol-deployment`
+   - 가이드 문서 → `sol-guide`
+   - 아키텍처 문서 → `sol-architecture`
+   - 트러블슈팅 → `sol-troubleshooting`
+   - 회의록 → `sol-meeting`
+   - ADR → `sol-adr`
+5. **허브 페이지**: 하위 페이지를 가진 페이지에는 Children Display 매크로 삽입 고려
+6. **작성 원칙**: style-guide.md 섹션 30 준수 (40자 이내 문장, 3줄 이내 문단, 숫자/결과 먼저, bullet point 우선, bold 남발 금지)
+
+## 문서 유형별 템플릿
+
+문서 작성 시 `references/templates/` 폴더의 유형별 가이드라인을 참조하세요:
+
+| 유형 | 템플릿 파일 | 용도 |
+|------|------------|------|
+| 기본 | `templates/default.md` | 범용 문서 |
+| 배포 | `templates/deployment.md` | 서비스 배포/패치 기록 |
+| 가이드 | `templates/guide.md` | 설치/설정/사용법 안내 |
+| 아키텍처 | `templates/architecture.md` | 시스템 구조/설계 문서 |
+| 트러블슈팅 | `templates/troubleshooting.md` | 장애/이슈 원인 분석 및 해결 기록 |
+| 회의록 | `templates/meeting.md` | 회의 안건/결정/후속 조치 기록 |
+| ADR | `templates/adr.md` | 기술 의사결정 기록 |
 
 ## 배포 노트 컨벤션
 
@@ -154,6 +197,8 @@ upload(page_id, "~my-diagram.tmp", xml_bytes, "application/xml", "draw.io Draft"
 ## 참조 문서
 
 스타일 가이드 및 템플릿은 references/ 폴더를 참고하세요:
-- `references/api-reference.md` - API 엔드포인트 상세 (첨부파일 업로드 포함)
-- `references/style-guide.md` - Confluence 문서 스타일 가이드 (draw.io 포맷 포함)
-- `references/templates/` - 문서 템플릿들
+- `references/api-reference.md` - API 엔드포인트 상세 (첨부파일 업로드, 라벨 관리 포함)
+- `references/style-guide.md` - Confluence 문서 스타일 가이드 (29개 섹션: 레이아웃, 매크로, draw.io 등)
+- `references/drawio-guide.md` - draw.io 다이어그램 유형별 Best Practice (7종)
+- `references/macro-patterns.md` - 상황별 매크로 조합 패턴 가이드 (10가지 패턴)
+- `references/templates/` - 문서 유형별 가이드라인 (7종)

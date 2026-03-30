@@ -281,6 +281,92 @@ r = requests.post(url, headers=headers, files=files, data=data)
 | expand | 확장할 필드 | `version,metadata` |
 | limit | 최대 결과 수 | `50` |
 
+### 11. 라벨 관리
+
+#### 11-1. 라벨 추가
+
+**POST** `/rest/api/content/{pageId}/label`
+
+페이지에 라벨을 추가합니다.
+
+**Path Parameters:**
+| 파라미터 | 설명 |
+|----------|------|
+| pageId | 페이지 ID |
+
+**Request Body:**
+```json
+[{"prefix": "global", "name": "라벨명"}]
+```
+
+**curl 예시:**
+```bash
+curl -s -X POST \
+  -H "Authorization: Bearer $CONFLUENCE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  "https://confluence.nexon.com/rest/api/content/{pageId}/label" \
+  -d '[{"prefix": "global", "name": "my-label"}]'
+```
+
+**응답 예시:**
+```json
+{
+  "results": [
+    {"prefix": "global", "name": "my-label", "id": "12345"}
+  ],
+  "size": 1
+}
+```
+
+#### 11-2. 라벨 삭제
+
+**DELETE** `/rest/api/content/{pageId}/label/{labelName}`
+
+페이지에서 특정 라벨을 제거합니다.
+
+**Path Parameters:**
+| 파라미터 | 설명 |
+|----------|------|
+| pageId | 페이지 ID |
+| labelName | 삭제할 라벨명 |
+
+**curl 예시:**
+```bash
+curl -s -X DELETE \
+  -H "Authorization: Bearer $CONFLUENCE_API_TOKEN" \
+  "https://confluence.nexon.com/rest/api/content/{pageId}/label/my-label"
+```
+
+**응답:** 성공 시 `204 No Content`
+
+#### 11-3. 라벨 조회
+
+**GET** `/rest/api/content/{pageId}/label`
+
+페이지에 등록된 라벨 목록을 조회합니다.
+
+**Path Parameters:**
+| 파라미터 | 설명 |
+|----------|------|
+| pageId | 페이지 ID |
+
+**curl 예시:**
+```bash
+curl -s -H "Authorization: Bearer $CONFLUENCE_API_TOKEN" \
+  "https://confluence.nexon.com/rest/api/content/{pageId}/label"
+```
+
+**응답 예시:**
+```json
+{
+  "results": [
+    {"prefix": "global", "name": "my-label", "id": "12345"},
+    {"prefix": "global", "name": "another-label", "id": "12346"}
+  ],
+  "size": 2
+}
+```
+
 ## 응답 상태 코드
 
 | 코드 | 설명 |

@@ -2,18 +2,22 @@
 
 ## 1. 문서 레이아웃 구조
 
-### 기본 레이아웃 (ac:layout)
+### 기본 레이아웃 (권장: layout 없이 직접 작성)
+
+일반적인 단일 컬럼 문서는 `ac:layout` 없이 콘텐츠를 직접 작성합니다. `ac:layout`을 사용하면 고정 높이 영역이 생겨 **페이지 내부에 불필요한 스크롤**이 발생할 수 있습니다.
+
 ```xml
-<ac:layout>
-  <ac:layout-section ac:type="single">
-    <ac:layout-cell>
-      <!-- 콘텐츠 -->
-    </ac:layout-cell>
-  </ac:layout-section>
-</ac:layout>
+<!-- 권장: layout 없이 바로 콘텐츠 작성 -->
+<ac:structured-macro ac:name="tip">
+  <ac:rich-text-body><p>문서 개요</p></ac:rich-text-body>
+</ac:structured-macro>
+<h1>...</h1>
 ```
 
-### 2단 레이아웃
+### 2단 레이아웃 (필요한 경우에만)
+
+2단 이상 레이아웃이 필요한 경우에만 `ac:layout`을 사용합니다.
+
 ```xml
 <ac:layout>
   <ac:layout-section ac:type="two_equal">
@@ -25,9 +29,9 @@
 
 ## 2. 섹션 헤더 스타일
 
-### 표준 패턴: h1 안에 아이콘(32px) + strong 텍스트 + 수평선
+### 표준 패턴: h1 안에 아이콘(24px) + strong 텍스트 + 수평선
 ```xml
-<h1><ac:image ac:height="32"><ri:url ri:value="https://example.com/icon.png" /></ac:image> <strong>섹션 제목</strong></h1>
+<h1><ac:image ac:height="24"><ri:url ri:value="https://example.com/icon.png" /></ac:image> <strong>섹션 제목</strong></h1>
 <hr />
 ```
 
@@ -551,3 +555,237 @@ Confluence에 draw.io 다이어그램을 삽입하려면 **첨부파일 3개 업
 - ERD, Flowchart, Sequence, Architecture, BPMN, State, Network/Infra (7종)
 - 스텐실 & 커스텀 아이콘 가이드
 - 공통 레이아웃 & 엣지 패턴, 파스텔 색상 팔레트
+
+## 25. Easy Heading Free 매크로 (목차/네비게이션)
+
+페이지 내 제목을 기반으로 **오른쪽 사이드바 네비게이션**을 자동 생성합니다. 기본 TOC 매크로와 달리 페이지 본문 영역을 차지하지 않아 스크롤을 아낄 수 있습니다.
+
+```xml
+<ac:structured-macro ac:name="easy-heading-free">
+  <ac:parameter ac:name="hiddenEditedFlag">true</ac:parameter>
+  <ac:parameter ac:name="navigationExpandOption">expand-all-by-default</ac:parameter>
+</ac:structured-macro>
+```
+
+### 파라미터
+
+| 파라미터 | 값 | 설명 |
+|----------|-----|------|
+| hiddenEditedFlag | true/false | 편집 플래그 숨김 여부 |
+| navigationExpandOption | expand-all-by-default / collapse-all-by-default | 목차 확장/축소 기본값 |
+
+### 삽입 위치
+
+- 문서 최상단, 개요(tip 패널) 바로 아래에 삽입
+- Page Properties(details 매크로)가 있는 경우 그 바로 아래에 삽입
+
+> 모든 문서에 항상 삽입합니다.
+
+## 26. Children Display 매크로
+
+현재 페이지의 하위 페이지를 자동으로 목록 표시합니다.
+
+```xml
+<ac:structured-macro ac:name="children">
+  <ac:parameter ac:name="sort">creation</ac:parameter>
+  <ac:parameter ac:name="style">h4</ac:parameter>
+  <ac:parameter ac:name="excerptType">simple</ac:parameter>
+  <ac:parameter ac:name="first">20</ac:parameter>
+  <ac:parameter ac:name="reverse">false</ac:parameter>
+  <ac:parameter ac:name="all">true</ac:parameter>
+</ac:structured-macro>
+```
+
+### 파라미터
+
+| 파라미터 | 값 | 설명 |
+|----------|-----|------|
+| sort | creation/title/modified | 정렬 기준 |
+| style | h2-h6 | 하위 페이지 제목 표시 스타일 |
+| excerptType | none/simple/rich | 발췌문 표시 방식 |
+| first | 숫자 | 표시할 최대 페이지 수 |
+| reverse | true/false | 역순 정렬 |
+| all | true/false | 모든 하위 항목(자손 포함) 표시 여부 |
+
+> 허브/인덱스 페이지에서 하위 페이지 자동 목록 표시에 적합합니다.
+
+## 27. Excerpt + Excerpt Include 매크로
+
+한 페이지에서 정의한 콘텐츠를 다른 페이지에서 참조하여 재사용합니다.
+
+### Excerpt (소스 페이지에 작성)
+```xml
+<ac:structured-macro ac:name="excerpt">
+  <ac:parameter ac:name="hidden">true</ac:parameter>
+  <ac:parameter ac:name="atlassian-macro-output-type">INLINE</ac:parameter>
+  <ac:rich-text-body>
+    <p>재사용할 콘텐츠를 여기에 작성합니다.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+```
+
+### Excerpt Include (참조하는 페이지에 작성)
+```xml
+<ac:structured-macro ac:name="excerpt-include">
+  <ac:parameter ac:name="nopanel">true</ac:parameter>
+  <ac:rich-text-body>
+    <ac:structured-macro ac:name="page">
+      <ac:parameter ac:name="">소스 페이지 제목</ac:parameter>
+    </ac:structured-macro>
+  </ac:rich-text-body>
+</ac:structured-macro>
+```
+
+> 공통 섹션(팀 소개, 서비스 정보, 연락처)을 한 곳에서 관리하고 여러 문서에서 참조할 때 사용합니다.
+
+## 28. Page Properties + Page Properties Report 매크로
+
+하위 페이지에 구조화된 메타데이터를 정의하고, 부모 페이지에서 집계 테이블로 표시합니다.
+
+### Page Properties (각 하위 페이지에 작성)
+```xml
+<ac:structured-macro ac:name="details">
+  <ac:rich-text-body>
+    <table>
+    <tbody>
+    <tr>
+    <th><p>담당자</p></th>
+    <td><p>홍길동</p></td>
+    </tr>
+    <tr>
+    <th><p>상태</p></th>
+    <td><ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">Green</ac:parameter><ac:parameter ac:name="title">운영중</ac:parameter></ac:structured-macro></td>
+    </tr>
+    <tr>
+    <th><p>버전</p></th>
+    <td><p>1.2.0</p></td>
+    </tr>
+    </tbody>
+    </table>
+  </ac:rich-text-body>
+</ac:structured-macro>
+```
+
+### Page Properties Report (부모/허브 페이지에 작성)
+```xml
+<ac:structured-macro ac:name="detailssummary">
+  <ac:parameter ac:name="firstcolumn">담당자</ac:parameter>
+  <ac:parameter ac:name="headings">담당자,상태,버전</ac:parameter>
+  <ac:parameter ac:name="sortBy">담당자</ac:parameter>
+  <ac:parameter ac:name="cql">label = "service" and ancestor = currentContent()</ac:parameter>
+</ac:structured-macro>
+```
+
+### detailssummary 파라미터
+
+| 파라미터 | 값 | 설명 |
+|----------|-----|------|
+| firstcolumn | 컬럼명 | 첫 번째 컬럼으로 사용할 항목 |
+| headings | 쉼표 구분 목록 | 표시할 컬럼 목록 |
+| sortBy | 컬럼명 | 정렬 기준 컬럼 |
+| cql | CQL 쿼리 | 대상 페이지 필터 조건 |
+
+> 서비스별 메타데이터(버전/담당자/상태)를 구조적으로 관리하고 부모 페이지에서 집계할 때 사용합니다.
+
+## 29. Chart 매크로
+
+테이블 데이터를 기반으로 차트를 생성합니다.
+
+```xml
+<ac:structured-macro ac:name="chart">
+  <ac:parameter ac:name="type">bar</ac:parameter>
+  <ac:parameter ac:name="width">600</ac:parameter>
+  <ac:parameter ac:name="height">400</ac:parameter>
+  <ac:parameter ac:name="dataOrientation">vertical</ac:parameter>
+  <ac:rich-text-body>
+    <table>
+    <thead>
+    <tr>
+    <th><p></p></th>
+    <th><p>1월</p></th>
+    <th><p>2월</p></th>
+    <th><p>3월</p></th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+    <th><p>탐지 건수</p></th>
+    <td><p>150</p></td>
+    <td><p>230</p></td>
+    <td><p>180</p></td>
+    </tr>
+    <tr>
+    <th><p>차단 건수</p></th>
+    <td><p>120</p></td>
+    <td><p>200</p></td>
+    <td><p>160</p></td>
+    </tr>
+    </tbody>
+    </table>
+  </ac:rich-text-body>
+</ac:structured-macro>
+```
+
+### 파라미터
+
+| 파라미터 | 값 | 설명 |
+|----------|-----|------|
+| type | bar/pie/line/area | 차트 유형 |
+| width | 숫자 (px) | 차트 너비 |
+| height | 숫자 (px) | 차트 높이 |
+| dataOrientation | vertical/horizontal | 데이터 방향 |
+| 3D | true/false | 3D 효과 적용 여부 |
+| colors | 쉼표 구분 색상값 | 시리즈별 색상 지정 |
+
+> draw.io 없이 테이블 데이터를 간단하게 시각화할 수 있습니다. 매크로 안에 테이블 데이터를 직접 포함하거나, 바로 위 테이블을 참조합니다.
+
+## 30. 문서 작성 원칙 (Readability)
+
+상위 보고 및 팀 간 공유를 고려하여, 모든 문서는 아래 원칙을 따릅니다.
+
+### 30-1. 제목 규칙
+
+모든 문서 제목은 날짜 prefix를 포함합니다:
+
+```
+(YYYY/MM/DD) 제목
+```
+
+- 날짜는 슬래시 구분 (예: 2026/03/30)
+- 날짜와 제목 사이 한 칸 공백
+- ADR: `(YYYY/MM/DD) ADR-{번호}: {요약}`
+
+### 30-2. 요약 필수
+
+- 모든 문서 최상단에 tip 패널로 3줄 이내 요약을 작성합니다.
+- 한 줄 결론 + 핵심 숫자 형태를 권장합니다.
+
+```xml
+<ac:structured-macro ac:name="tip">
+  <ac:rich-text-body>
+    <p>Redis 캐시 도입으로 API 응답시간 <strong>200ms → 50ms</strong> 개선. 3/28 프로덕션 적용 완료.</p>
+  </ac:rich-text-body>
+</ac:structured-macro>
+```
+
+### 30-3. 문장/문단 길이
+
+- 한 문장은 **40자 이내**
+- 한 문단은 **3줄 이내**
+- 숫자/결과를 먼저 쓰고, 배경은 뒤에 배치
+
+> **나쁜 예:** 기존 시스템에서 금칙어 사전을 매번 DB에서 조회하는 구조로 인해 평균 응답 시간이 200ms로 느려지는 문제가 발생하여 Redis 캐시를 도입하기로 결정함.
+>
+> **좋은 예:** 응답시간 200ms → 50ms 개선. 금칙어 사전 DB 조회를 Redis 캐시로 대체.
+
+### 30-4. 시각 비중
+
+- 나열 항목이 3개 이상이면 **테이블** 사용
+- 흐름/순서 설명이면 **다이어그램** 또는 순서 목록 사용
+- 긴 문단 대신 **bullet point** 우선
+
+### 30-5. 강조 규칙
+
+- 핵심 숫자/결론은 `<strong>` (bold) 처리
+- 한 섹션에서 bold는 **1~2개만** — 남발하면 강조 효과가 사라짐
+- 결정사항은 tip 패널, 주의사항은 warning 패널 사용

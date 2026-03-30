@@ -1,6 +1,6 @@
 ---
 name: confluence
-description: Confluence 페이지 검색/조회/생성/수정. "confluence", "컨플루언스", "컨플", "문서 생성", "페이지 검색", "배포 노트" 등의 키워드에서 활성화
+description: Confluence 페이지 검색/조회/생성/수정. "confluence", "컨플루언스", "컨플", "문서 생성", "페이지 검색", "배포 노트", "아키텍처", "회의록", "트러블슈팅", "ADR", "라벨" 등의 키워드에서 활성화
 ---
 
 # Confluence 스킬
