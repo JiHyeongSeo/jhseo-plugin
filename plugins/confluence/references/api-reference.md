@@ -236,7 +236,7 @@ curl -s -H "Authorization: Bearer $CONFLUENCE_API_TOKEN" \
 curl -s -X POST \
   -H "Authorization: Bearer $CONFLUENCE_API_TOKEN" \
   -H "X-Atlassian-Token: nocheck" \
-  -F "file=@diagram.drawio;type=application/vnd.jgraph.mxfile" \
+  -F "file=@my-diagram;type=application/vnd.jgraph.mxfile" \
   -F "comment=draw.io diagram" \
   "https://confluence.nexon.com/rest/api/content/{pageId}/child/attachment"
 ```

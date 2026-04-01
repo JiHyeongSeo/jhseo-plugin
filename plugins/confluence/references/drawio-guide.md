@@ -3,6 +3,14 @@
 draw.io 다이어그램 작성 시 유형별 Shape, 색상, 레이아웃 가이드입니다.
 기본 draw.io XML 포맷 및 Confluence 삽입 방법은 `style-guide.md` 섹션 22-23을 참고하세요.
 
+> **⚠️⚠️⚠️ 최우선 규칙: 노드와 엣지는 절대 겹치지 않게 배치합니다.**
+> - **노드끼리 겹침 금지**: 모든 노드는 충분한 간격(최소 40px)을 두고 배치
+> - **엣지가 노드를 관통 금지**: 연결선이 중간 노드를 뚫고 지나가지 않도록 우회
+> - **엣지끼리 겹침 금지**: 연결선이 같은 경로를 공유하지 않도록 경로 분리
+> - **라벨 겹침 금지**: 노드 라벨, 화살표 라벨이 다른 요소와 겹치지 않게 배치
+>
+> 다이어그램 완성 후 모든 좌표를 검토하여 겹침이 없는지 반드시 확인하세요.
+
 ## 공통 색상 원칙
 
 파스텔톤을 사용합니다. 한 다이어그램에 3-4색 이내로 제한합니다.
@@ -389,6 +397,22 @@ draw.io 다이어그램 작성 시 유형별 Shape, 색상, 레이아웃 가이�
 
 ## 8. mxGraph 스텐실 & 커스텀 아이콘 가이드
 
+### 아이콘 사용 원칙
+
+> **아이콘을 적극적으로 사용하세요.** 단순 사각형 노드만 나열하지 말고, 역할에 맞는 아이콘을 반드시 사용합니다.
+
+**기본 아이콘 규칙:**
+- **서버**: 특별한 언급이 없으면 Python 아이콘 사용
+- **메신저**: 특별한 언급이 없으면 Slack 아이콘 사용
+- **AWS 서비스**: 해당 프로덕트의 공식 아이콘을 찾아서 사용 (예: Lambda → `mxgraph.aws4.lambda`, S3 → `mxgraph.aws4.s3`, RDS → `mxgraph.aws4.rds` 등)
+- **아이콘이 불확실한 경우**: 임의로 추측하지 말고 사용자에게 어떤 아이콘을 사용할지 질문할 것
+
+**아이콘 라벨 스타일:**
+- 아이콘 아래 라벨(`verticalLabelPosition=bottom`)에는 텍스트와 라벨 배경(그림자) 사이에 **8px padding** 적용
+- 스타일: `spacingTop=8;` 을 추가하여 아이콘과 라벨 텍스트 사이 여백 확보
+
+> **⚠️ 주의: 외부 URL 아이콘 사용 금지.** `https://cdn-icons-png.flaticon.com/...` 등 외부 URL을 image에 직접 넣지 마세요. draw.io 내장 스텐실(`shape=mxgraph.aws4.*`, `shape=mxgraph.network.*` 등)이나 Base64 인코딩 SVG만 사용합니다.
+
 ### 내장 스텐실 목록
 
 draw.io에서 사용 가능한 주요 스텐실 라이브러리:
@@ -413,16 +437,16 @@ draw.io에서 사용 가능한 주요 스텐실 라이브러리:
 
 ### 커스텀 SVG 아이콘 삽입
 
-draw.io에서 외부 이미지나 SVG를 노드로 사용할 수 있습니다:
+draw.io 내장 스텐실로 커버되지 않는 경우, **Base64 인코딩 SVG**만 사용합니다. 외부 URL은 사용하지 마세요.
 
 ```xml
-<!-- URL 이미지 아이콘 -->
-<mxCell id="icon1" value="모니터링" style="shape=image;verticalLabelPosition=bottom;labelBackgroundColor=default;verticalAlign=top;aspect=fixed;imageAspect=0;image=https://cdn-icons-png.flaticon.com/128/2991/2991106.png;" vertex="1" parent="1">
+<!-- Base64 인코딩 SVG 아이콘 (spacingTop=8로 라벨 padding 적용) -->
+<mxCell id="icon1" value="커스텀 서비스" style="shape=image;verticalLabelPosition=bottom;labelBackgroundColor=default;verticalAlign=top;aspect=fixed;imageAspect=0;spacingTop=8;image=data:image/svg+xml,PHN2ZyB4bWxucz0i...;" vertex="1" parent="1">
   <mxGeometry x="100" y="100" width="48" height="48" as="geometry"/>
 </mxCell>
 
-<!-- Base64 인코딩 SVG 아이콘 -->
-<mxCell id="icon2" value="커스텀" style="shape=image;verticalLabelPosition=bottom;labelBackgroundColor=default;verticalAlign=top;aspect=fixed;imageAspect=0;image=data:image/svg+xml,PHN2ZyB4bWxucz0i...;" vertex="1" parent="1">
+<!-- 내장 스텐실 아이콘 사용 권장 (spacingTop=8로 라벨 padding 적용) -->
+<mxCell id="icon2" value="Lambda" style="shape=mxgraph.aws4.lambda;verticalLabelPosition=bottom;labelBackgroundColor=default;verticalAlign=top;aspect=fixed;spacingTop=8;" vertex="1" parent="1">
   <mxGeometry x="200" y="100" width="48" height="48" as="geometry"/>
 </mxCell>
 ```
@@ -479,6 +503,107 @@ draw.io에서 기본 제공하는 이미지 경로 (`image=img/lib/...`):
 | `ERzeroToMany` | 원+까마귀발 | ERD 0..N |
 | `ERoneToMany` | 선+까마귀발 | ERD 1..N |
 | `none` | 없음 | 양방향/무방향 |
+
+### 엣지 연결 규칙 (겹침 방지)
+
+> **핵심 원칙: 엣지(연결선)는 절대 겹치지 않게 배치합니다.**
+
+**같은 면에서 여러 엣지를 뽑을 때:**
+- 같은 지점에서 여러 개를 뽑지 말고, 면을 따라 균등하게 간격을 두고 연결
+- 예: 왼쪽 면에서 3개 뽑을 경우 → 상단 25%, 중앙 50%, 하단 75% 지점에서 각각 출발
+- `exitX`, `exitY`, `entryX`, `entryY`를 사용하여 정확한 연결 지점 지정
+
+```xml
+<!-- 왼쪽 면에서 3개 엣지를 간격 두고 연결하는 예시 -->
+<mxCell style="exitX=0;exitY=0.25;entryX=1;entryY=0.5;exitDx=0;exitDy=0;entryDx=0;entryDy=0;" edge="1" source="nodeA" target="nodeB" parent="1"/>
+<mxCell style="exitX=0;exitY=0.5;entryX=1;entryY=0.5;exitDx=0;exitDy=0;entryDx=0;entryDy=0;" edge="1" source="nodeA" target="nodeC" parent="1"/>
+<mxCell style="exitX=0;exitY=0.75;entryX=1;entryY=0.5;exitDx=0;exitDy=0;entryDx=0;entryDy=0;" edge="1" source="nodeA" target="nodeD" parent="1"/>
+```
+
+**엣지-노드 관통 검사 (필수):**
+
+다이어그램 완성 후, 모든 엣지에 대해 경로상 중간 노드(source/target이 아닌 노드)를 관통하는지 검사합니다.
+
+검사 방법: 엣지의 경로(직선 또는 orthogonal 꺾임 구간)가 어떤 노드의 영역을 **완전히 가로지르는지** 확인합니다.
+
+```
+노드 영역: (nodeX, nodeY) ~ (nodeX + width, nodeY + height)
+
+[가로 관통 검사] 엣지의 수평 구간이 노드의 좌측면(nodeX)과 우측면(nodeX+width) 모두를 통과하는가?
+→ 엣지 Y좌표가 nodeY ~ nodeY+height 범위 내이고,
+  엣지가 nodeX 왼쪽에서 시작하여 nodeX+width 오른쪽까지 이어지면 → 가로 관통
+
+[세로 관통 검사] 엣지의 수직 구간이 노드의 상단면(nodeY)과 하단면(nodeY+height) 모두를 통과하는가?
+→ 엣지 X좌표가 nodeX ~ nodeX+width 범위 내이고,
+  엣지가 nodeY 위에서 시작하여 nodeY+height 아래까지 이어지면 → 세로 관통
+```
+
+관통이 감지되면 → 해당 노드의 **옆으로 우회**하도록 waypoint를 추가합니다:
+
+```xml
+<!-- 관통 우회 예시: nodeB(x=200,y=100,w=120,h=60)를 피해 오른쪽으로 우회 -->
+<mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" source="nodeA" target="nodeC" parent="1">
+  <mxGeometry relative="1" as="geometry">
+    <Array as="points">
+      <!-- nodeB 오른쪽 바깥 + 20px 여유 -->
+      <mxPoint x="340" y="80"/>
+      <mxPoint x="340" y="200"/>
+    </Array>
+  </mxGeometry>
+</mxCell>
+```
+
+우회 방향 선택 기준:
+- 엣지 전체 흐름 방향에서 **더 짧은 우회 경로** 선택 (왼쪽 vs 오른쪽, 위쪽 vs 아래쪽)
+- 우회 경로에도 다른 노드가 없는지 확인
+- 노드 경계로부터 최소 **20px** 여유를 두고 우회
+
+**여러 엣지를 같은 방향으로 라우팅할 때 (실전 전략):**
+
+같은 그룹에서 오른쪽/왼쪽 외부 노드로 여러 엣지를 뽑아야 할 때, **수평 구간의 Y레벨을 엇갈리게** 배치하고, **수직 구간의 X좌표도 분리**합니다.
+
+설계 순서:
+1. 모든 엣지의 출발/도착 노드 좌표를 먼저 파악
+2. 각 엣지에 서로 다른 Y레벨(수평 구간)과 X좌표(수직 구간)를 배정 (최소 20~30px 간격)
+3. 각 엣지 경로가 다른 엣지의 수평/수직 구간과 교차하는지 검증
+
+```
+예시: 그룹(x:280-850) 안의 노드 3개 → 오른쪽 외부 노드 2개로 연결
+
+엣지A: report → ext_slack2 (위쪽)
+  경로: 상단 exit → y=670 수평 → x=1070 수직 상승 → 좌측 entry
+  수평 구간: y=670 (x: 770→1070)
+  수직 구간: x=1070 (y: 670→314)
+
+엣지B: poll_train → ext_train (가운데)
+  경로: 상단 exit → y=700 수평 → 좌측 entry
+  수평 구간: y=700 (x: 619→1100)
+
+엣지C: start_train → ext_train (아래)
+  경로: 하단 exit → y=900 하단 우회 → x=1124 수직 상승 → 하단 entry
+  수평 구간: y=900 (x: 409→1124)
+  수직 구간: x=1124 (y: 900→708)
+
+교차 검증:
+- 엣지A 수직(x=1070) vs 엣지B 수평(y=700): x=1070에서 y=670→314 (위로 감), y=700 미도달 ✓
+- 엣지C 수직(x=1124) vs 엣지B 수평(y=700, x→1100): x=1124 > 1100 범위 밖 ✓
+- 엣지A 수직(x=1070) vs 엣지C 수직(x=1124): 서로 다른 x ✓
+→ 3개 엣지 모두 교차 없음
+```
+
+핵심:
+- waypoint는 최소한으로 (1~3개). 불필요한 중간 포인트는 제거
+- 같은 target 노드에 여러 엣지가 진입할 때: `entryX/entryY`를 다르게 하여 진입 지점 분산
+
+**엣지끼리 겹침 방지:**
+- 연결선끼리 같은 경로를 공유하지 않도록 경로 분리
+- `edgeStyle=orthogonalEdgeStyle`을 사용하여 직각 꺾임으로 경로를 깔끔하게 정리
+- 겹치는 구간이 있으면 한쪽을 20px 오프셋하여 분리
+
+**화살표 라벨 겹침 방지:**
+- 화살표에 라벨이 있을 때, 다른 화살표나 노드와 겹치지 않는 위치에 배치
+- `labelBackgroundColor=#ffffff`로 배경색을 넣어 다른 요소 위에 겹쳐도 가독성 확보
+- 라벨 위치를 수동으로 조정하려면 `<mxGeometry x="offset" y="offset" relative="1" as="geometry"/>` 사용
 
 ### 그리드 정렬 규칙
 
