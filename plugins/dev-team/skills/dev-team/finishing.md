@@ -1,200 +1,81 @@
 ---
 name: finishing-a-development-branch
-description: Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup
+description: 구현 완료 후 브랜치를 어떻게 처리할지 옵션을 제시하고 실행
 ---
 
 # Finishing a Development Branch
 
-## Overview
+구현 완료 후 테스트를 검증하고 브랜치 처리 옵션을 제시한다.
 
-Guide completion of development work by presenting clear options and handling chosen workflow.
-
-**Core principle:** Verify tests → Present options → Execute choice → Clean up.
-
-**Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
-
-## The Process
-
-### Step 1: Verify Tests
-
-**Before presenting options, verify tests pass:**
+## Step 1: 테스트 검증
 
 ```bash
-# Run project's test suite
-npm test / cargo test / pytest / go test ./...
+# 프로젝트에 맞는 테스트 명령 실행
+npm test / pytest / go test ./... / cargo test
 ```
 
-**If tests fail:**
-```
-Tests failing (<N> failures). Must fix before completing:
+실패 시 수정 후 재실행. 테스트가 통과해야 다음 단계로 진행.
 
-[Show failures]
-
-Cannot proceed with merge/PR until tests pass.
-```
-
-Stop. Don't proceed to Step 2.
-
-**If tests pass:** Continue to Step 2.
-
-### Step 2: Determine Base Branch
+## Step 2: 베이스 브랜치 확인
 
 ```bash
-# Try common base branches
 git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
 ```
 
-Or ask: "This branch split from main - is that correct?"
-
-### Step 3: Present Options
-
-Present exactly these 4 options:
+## Step 3: 옵션 제시
 
 ```
-Implementation complete. What would you like to do?
+구현이 완료되었습니다. 어떻게 하시겠어요?
 
-1. Merge back to <base-branch> locally
-2. Push and create a Pull Request
-3. Keep the branch as-is (I'll handle it later)
-4. Discard this work
-
-Which option?
+1. 로컬에서 <base-branch>에 머지
+2. Push 후 Pull Request 생성
+3. 브랜치 유지 (나중에 처리)
+4. 작업 폐기
 ```
 
-**Don't add explanation** - keep options concise.
+## Step 4: 선택 실행
 
-### Step 4: Execute Choice
-
-#### Option 1: Merge Locally
+### 옵션 1: 로컬 머지
 
 ```bash
-# Switch to base branch
 git checkout <base-branch>
-
-# Pull latest
 git pull
-
-# Merge feature branch
 git merge <feature-branch>
-
-# Verify tests on merged result
-<test command>
-
-# If tests pass
+# 테스트 재실행
 git branch -d <feature-branch>
 ```
 
-Then: Cleanup worktree (Step 5)
-
-#### Option 2: Push and Create PR
+### 옵션 2: PR 생성
 
 ```bash
-# Push branch
 git push -u origin <feature-branch>
-
-# Create PR
 gh pr create --title "<title>" --body "$(cat <<'EOF'
 ## Summary
-<2-3 bullets of what changed>
+<변경 내용 2-3줄>
 
 ## Test Plan
-- [ ] <verification steps>
+- [ ] <검증 단계>
 EOF
 )"
 ```
 
-Then: Cleanup worktree (Step 5)
+### 옵션 3: 브랜치 유지
 
-#### Option 3: Keep As-Is
+현재 브랜치를 그대로 유지. 아무것도 하지 않음.
 
-Report: "Keeping branch <name>. Worktree preserved at <path>."
+### 옵션 4: 작업 폐기
 
-**Don't cleanup worktree.**
-
-#### Option 4: Discard
-
-**Confirm first:**
+**먼저 확인:**
 ```
-This will permanently delete:
-- Branch <name>
-- All commits: <commit-list>
-- Worktree at <path>
+다음이 영구 삭제됩니다:
+- 브랜치: <name>
+- 커밋: <commit-list>
 
-Type 'discard' to confirm.
+'discard' 를 입력하여 확인하세요.
 ```
 
-Wait for exact confirmation.
-
-If confirmed:
+확인 후:
 ```bash
 git checkout <base-branch>
 git branch -D <feature-branch>
 ```
-
-Then: Cleanup worktree (Step 5)
-
-### Step 5: Cleanup Worktree
-
-**For Options 1, 2, 4:**
-
-Check if in worktree:
-```bash
-git worktree list | grep $(git branch --show-current)
-```
-
-If yes:
-```bash
-git worktree remove <worktree-path>
-```
-
-**For Option 3:** Keep worktree.
-
-## Quick Reference
-
-| Option | Merge | Push | Keep Worktree | Cleanup Branch |
-|--------|-------|------|---------------|----------------|
-| 1. Merge locally | ✓ | - | - | ✓ |
-| 2. Create PR | - | ✓ | ✓ | - |
-| 3. Keep as-is | - | - | ✓ | - |
-| 4. Discard | - | - | - | ✓ (force) |
-
-## Common Mistakes
-
-**Skipping test verification**
-- **Problem:** Merge broken code, create failing PR
-- **Fix:** Always verify tests before offering options
-
-**Open-ended questions**
-- **Problem:** "What should I do next?" → ambiguous
-- **Fix:** Present exactly 4 structured options
-
-**Automatic worktree cleanup**
-- **Problem:** Remove worktree when might need it (Option 2, 3)
-- **Fix:** Only cleanup for Options 1 and 4
-
-**No confirmation for discard**
-- **Problem:** Accidentally delete work
-- **Fix:** Require typed "discard" confirmation
-
-## Red Flags
-
-**Never:**
-- Proceed with failing tests
-- Merge without verifying tests on result
-- Delete work without confirmation
-- Force-push without explicit request
-
-**Always:**
-- Verify tests before offering options
-- Present exactly 4 options
-- Get typed confirmation for Option 4
-- Clean up worktree for Options 1 & 4 only
-
-## Integration
-
-**Called by:**
-- **subagent-driven-development** (Step 7) - After all tasks complete
-- **executing-plans** (Step 5) - After all batches complete
-
-**Pairs with:**
-- **using-git-worktrees** - Cleans up worktree created by that skill

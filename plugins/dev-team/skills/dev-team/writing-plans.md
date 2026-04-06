@@ -13,7 +13,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Context:** This should be run in a dedicated worktree (created by brainstorming skill).
+**Context:** 스펙 승인 후 feature 브랜치에서 실행된다.
 
 **Save plans to:** `_workspace/plan.md`
 - (User preferences for plan location override this default)

@@ -179,8 +179,8 @@ Phase 3(Worktree 설정) → Phase 4(구현) → Phase 5(검증 루프) 전체�
 ```
 스펙이 확정되었습니다. 다음 순서로 작업을 진행해주세요.
 
-1. [Phase 3] Git Worktree 설정
-   - skills/dev-team/git-worktrees.md 를 따라 격리 브랜치를 생성하세요.
+1. [Phase 3] 브랜치 생성
+   - 현재 디렉토리에서 새 브랜치를 생성하세요: `git checkout -b feature/<기능명>`
    - 베이스라인 테스트가 통과하는 것을 확인하세요.
 
 2. [Phase 4] TDD 구현
