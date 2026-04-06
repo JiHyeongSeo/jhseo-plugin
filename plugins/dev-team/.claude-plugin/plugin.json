@@ -1,6 +1,6 @@
 {
   "name": "dev-team",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Builder + Validator Agent Teams 기반 개발 워크플로우. 스펙 작성 → TDD 구현 → 독립 검증 루프",
   "author": {
     "name": "SOL Team"
