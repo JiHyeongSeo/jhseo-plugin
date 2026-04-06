@@ -85,6 +85,15 @@
         "데이터시각화"
       ],
       "category": "development"
+    },
+    {
+      "name": "dev-team",
+      "source": "./plugins/dev-team",
+      "description": "Builder + Validator Agent Teams 기반 개발 워크플로우. 스펙 작성 → TDD 구현 → 독립 검증 루프",
+      "version": "1.0.0",
+      "author": { "name": "SOL Team" },
+      "keywords": ["agent-teams", "builder", "validator", "dev-workflow", "tdd", "code-review"],
+      "category": "development"
     }
   ]
 }
