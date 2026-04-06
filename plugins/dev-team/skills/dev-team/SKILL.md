@@ -9,30 +9,6 @@ description: "개발팀 오케스트레이터. 만들어줘, 구현해줘, 개�
 
 ---
 
-## 사전 조건: Agent Teams 확인
-
-**이 스킬의 모든 동작보다 먼저 실행한다.**
-
-```bash
-echo "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-NOT_SET}"
-```
-
-결과가 `NOT_SET` 또는 `1`이 아닌 값이면 즉시 중단하고 다음 메시지를 사용자에게 출력한다:
-
-```
-⚠️ dev-team 플러그인을 사용하려면 Agent Teams 기능이 필요합니다.
-
-터미널에서 다음 환경변수를 설정한 뒤 다시 시도해주세요:
-
-  export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-
-또는 셸 프로파일(~/.zshrc, ~/.bashrc)에 추가하면 영구적으로 적용됩니다.
-```
-
-**Agent Teams가 활성화되지 않으면 이후 Phase를 절대 실행하지 않는다.**
-
----
-
 ## 설정값 읽기
 
 아래 순서로 설정을 읽어 나중에 읽은 값이 앞의 값을 덮어쓴다.
