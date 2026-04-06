@@ -68,6 +68,9 @@ plugins/dev-team/
               "어떤 테스트가 필요한가?"
               "엣지 케이스는 무엇인가?"
               "Mock을 쓸지, 실제 환경을 쓸지?"
+            - 문서화 관련 질문 포함:
+              "문서화가 필요한가?"
+              "어디에 작성할 것인가? (로컬 README / Confluence / Notion)"
           - 사용자 확인 대기 ← 여기서 멈춤
 
 [Phase 2] 스펙 작성 (Builder)
@@ -134,7 +137,8 @@ plugins/dev-team/
 - 요구사항을 받아 스펙 문서 작성
 - 태스크 분해 (writing-plans 스킬 활용)
 - TDD 방식으로 구현 (test-driven-development 스킬 활용)
-- 변경사항 기반 문서 작성
+- 스펙에 명시된 위치에 문서 작성
+  (로컬 README / Confluence 플러그인 활용 / Notion MCP 활용)
 - Validator 피드백 수신 후 수정
 
 사용 도구:
@@ -273,6 +277,11 @@ _workspace/
 - [ ] 항목 1 (구체적이고 검증 가능하게)
 - [ ] 항목 2
 - [ ] 항목 3
+
+## 문서화 계획
+- 필요 여부: Yes / No
+- 대상: README / Confluence / Notion / 해당없음
+- 작성 내용: (예: API 명세, 변경사항 요약, 아키텍처 설명)
 
 ## QA 계획
 ### 테스트 범위
