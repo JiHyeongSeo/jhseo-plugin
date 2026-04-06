@@ -1,6 +1,6 @@
 ---
 name: builder
-description: Builder 에이전트 - 스펙 기반 구현, TDD, 문서화, Validator 피드백 반영. "구현", "개발", "빌드", "코딩", "작성", "만들어", "build", "implement", "develop" 키워드에서 활성화
+description: Builder 에이전트 - 스펙 기반 구현, TDD, 문서화, Validator 피드백 반영. "구현해줘", "개발해줘", "빌드", "코딩", "작성", "만들어줘", "build", "implement", "develop" 키워드에서 활성화
 model: sonnet
 ---
 
