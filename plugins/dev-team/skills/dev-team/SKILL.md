@@ -11,9 +11,7 @@ description: "개발팀 오케스트레이터. 만들어줘, 구현해줘, 개�
 
 ## 설정값 읽기
 
-아래 순서로 설정을 읽어 나중에 읽은 값이 앞의 값을 덮어쓴다.
-
-### Step 1: 기본값
+### 기본값
 
 ```
 maxIterations = 10
@@ -21,31 +19,13 @@ builderModel  = "sonnet"
 validatorModel = "sonnet"
 ```
 
-### Step 2: ~/.claude.json
-
-```bash
-cat ~/.claude.json 2>/dev/null
-```
-
-파일이 존재하면 JSON에서 `dev-team` 키 아래의 값을 읽어 기본값을 덮어쓴다.
-
-```json
-{
-  "dev-team": {
-    "maxIterations": 5,
-    "builderModel": "opus",
-    "validatorModel": "sonnet"
-  }
-}
-```
-
-### Step 3: 프로젝트 CLAUDE.md
+### 프로젝트 CLAUDE.md 오버라이드
 
 ```bash
 cat CLAUDE.md 2>/dev/null
 ```
 
-CLAUDE.md에 `dev-team` 섹션이 있으면 해당 값으로 다시 덮어쓴다. 형식 예시:
+CLAUDE.md에 `dev-team` 섹션이 있으면 해당 값으로 덮어쓴다. 형식 예시:
 
 ```markdown
 ## dev-team
@@ -53,8 +33,6 @@ CLAUDE.md에 `dev-team` 섹션이 있으면 해당 값으로 다시 덮어쓴다
 - builderModel: opus
 - validatorModel: opus
 ```
-
-**최종 설정값을 확인한 뒤 Phase 0으로 진행한다.**
 
 ---
 
