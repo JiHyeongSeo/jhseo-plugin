@@ -38,7 +38,13 @@ plugins/dev-team/
 │   └── verification.md     # sol에서 복사
 ├── skills/
 │   └── dev-team/
-│       └── SKILL.md        # 오케스트레이터 스킬
+│       ├── SKILL.md        # 오케스트레이터 스킬
+│       ├── brainstorming.md    # Superpowers에서 복사+수정
+│       ├── writing-plans.md   # Superpowers에서 복사+수정
+│       ├── tdd.md             # Superpowers에서 복사+수정
+│       ├── git-worktrees.md   # Superpowers에서 복사
+│       ├── verification.md    # Superpowers에서 복사
+│       └── finishing.md       # Superpowers에서 복사
 └── commands/
     └── dev.md              # /dev 커맨드 정의
 ```
@@ -153,18 +159,30 @@ Validator 오케스트레이션은 SKILL.md가 담당.
 
 ---
 
-## 6. Superpowers 스킬 활용 계획
+## 6. Superpowers 스킬 내재화 계획
 
-직접 구현하지 않고 기존 스킬을 호출하는 방식:
+**방침: Superpowers 스킬을 직접 호출하지 않고 복사 후 내재화**
 
-| Superpowers 스킬 | 활용 시점 | 호출 주체 |
-|-----------------|----------|----------|
-| `superpowers:brainstorming` | Phase 1 요구사항 명확화 | 오케스트레이터 |
-| `superpowers:writing-plans` | Phase 2 스펙/태스크 분해 | Builder |
-| `superpowers:using-git-worktrees` | Phase 3 격리 브랜치 생성 | 오케스트레이터 |
-| `superpowers:test-driven-development` | Phase 4 구현 | Builder |
-| `superpowers:verification-before-completion` | Phase 5 완료 전 검증 | Validator |
-| `superpowers:finishing-a-development-branch` | Phase 6 완료 처리 | 오케스트레이터 |
+이유:
+- Superpowers 설치 의존성 제거 → 플러그인 단독 동작
+- Superpowers 업데이트에 영향받지 않음 → 팀 워크플로우 안정성 확보
+- 팀 입맛에 맞게 커스터마이징 가능
+
+### 내재화 스킬 목록
+
+| 원본 (Superpowers) | 내재화 위치 | 커스터마이징 내용 |
+|-------------------|------------|----------------|
+| `brainstorming` | `skills/dev-team/brainstorming.md` | QA 계획 질문 기본 포함 |
+| `writing-plans` | `skills/dev-team/writing-plans.md` | spec.md 포맷 연동 |
+| `using-git-worktrees` | `skills/dev-team/git-worktrees.md` | 최소 수정 |
+| `test-driven-development` | `skills/dev-team/tdd.md` | 팀 테스트 환경 반영 |
+| `verification-before-completion` | `skills/dev-team/verification.md` | 최소 수정 |
+| `finishing-a-development-branch` | `skills/dev-team/finishing.md` | 최소 수정 |
+
+### 업데이트 정책
+
+Superpowers 원본이 크게 업데이트되면 팀이 판단해서 선택적으로 반영.
+자동 추종하지 않음.
 
 ---
 
