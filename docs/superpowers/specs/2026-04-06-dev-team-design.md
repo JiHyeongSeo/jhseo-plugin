@@ -44,7 +44,8 @@ plugins/dev-team/
 │       ├── tdd.md             # Superpowers에서 복사+수정
 │       ├── git-worktrees.md   # Superpowers에서 복사
 │       ├── verification.md    # Superpowers에서 복사
-│       └── finishing.md       # Superpowers에서 복사
+│       ├── finishing.md       # Superpowers에서 복사
+│       └── debugging.md       # Superpowers에서 복사
 └── commands/
     └── dev.md              # /dev 커맨드 정의
 ```
@@ -182,6 +183,7 @@ Validator 오케스트레이션은 SKILL.md가 담당.
 | `test-driven-development` | `skills/dev-team/tdd.md` | 팀 테스트 환경 반영 |
 | `verification-before-completion` | `skills/dev-team/verification.md` | 최소 수정 |
 | `finishing-a-development-branch` | `skills/dev-team/finishing.md` | 최소 수정 |
+| `systematic-debugging` | `skills/dev-team/debugging.md` | 최소 수정 |
 
 ### 업데이트 정책
 

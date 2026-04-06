@@ -164,173 +164,76 @@ CLAUDE.md에 `dev-team` 섹션이 있으면 해당 값으로 다시 덮어쓴다
 
 ---
 
-## Phase 3: Git Worktree 설정
+## Phase 3-5: Agent Team 자율 실행
 
-`skills/dev-team/git-worktrees.md` 스킬의 프로세스를 따른다.
+**스펙이 승인되면 오케스트레이터는 Agent Team을 구성하고 이후 실행을 위임한다.**
+Phase 3(Worktree 설정) → Phase 4(구현) → Phase 5(검증 루프) 전체를 팀이 자율적으로 수행한다.
 
-1. 워크트리 디렉토리 탐색 (기존 > CLAUDE.md > 사용자 질문)
-2. .gitignore 검증 (프로젝트 로컬인 경우)
-3. 워크트리 생성 및 브랜치 생성
-4. 프로젝트 의존성 설치
-5. 베이스라인 테스트 실행
+### Agent Team 구성
 
-```bash
-git worktree add <worktree-path> -b <branch-name>
-cd <worktree-path>
-# 프로젝트 의존성 설치 (auto-detect)
-# 베이스라인 테스트 실행
+다음 두 팀원을 스폰한다:
+
+**Builder** (`agents/builder.md`, 모델: {builderModel})
+
+스폰 메시지:
+```
+스펙이 확정되었습니다. 다음 순서로 작업을 진행해주세요.
+
+1. [Phase 3] Git Worktree 설정
+   - skills/dev-team/git-worktrees.md 를 따라 격리 브랜치를 생성하세요.
+   - 베이스라인 테스트가 통과하는 것을 확인하세요.
+
+2. [Phase 4] TDD 구현
+   - skills/dev-team/writing-plans.md 로 _workspace/plan.md 를 작성하세요.
+   - skills/dev-team/tdd.md (Red-Green-Refactor) 를 따라 구현하세요.
+   - _workspace/spec.md 의 Done Criteria와 QA 계획을 모두 충족하세요.
+
+3. 구현 완료 후 Validator에게 SendMessage로 검토를 요청하세요:
+   "구현 완료. 검토 요청합니다. 라운드: 1 / 스펙: _workspace/spec.md"
+
+4. Validator로부터 [PASS] 를 받으면 저(오케스트레이터)에게 SendMessage로 완료를 알려주세요.
+   [ISSUES-FOUND] 를 받으면 이슈를 수정하고 재검토를 요청하세요. (최대 {maxIterations}회)
+   maxIterations 초과 시 저에게 미해결 이슈를 보고하세요.
+
+스펙 문서: _workspace/spec.md
 ```
 
-**Phase 3 완료 조건:** 워크트리가 생성되고 베이스라인 테스트가 통과함.
+**Validator** (`agents/code-quality.md` + `agents/security.md` + `agents/performance.md` + `agents/verification.md`, 모델: {validatorModel})
 
----
-
-## Phase 4: TDD 구현
-
-### Step 1: 구현 계획 작성
-
-`skills/dev-team/writing-plans.md` 스킬을 따라 `_workspace/plan.md`를 작성한다.
-
-- `_workspace/spec.md`의 Done Criteria와 QA 계획을 태스크로 분해
-- 각 태스크는 2-5분 단위의 작은 스텝으로 구성
-- 파일 구조, 정확한 경로, 코드 블록 포함
-
-### Step 2: Builder 에이전트로 구현 실행
-
-`skills/dev-team/tdd.md` 가이드를 따라 TDD로 구현한다.
-
-- Red-Green-Refactor 사이클 준수
-- 스펙의 QA 계획 섹션에 정의된 엣지 케이스를 TDD 사이클에 반영
-- 기능 단위로 작게 커밋
-- 모든 테스트가 통과하는 상태를 유지
-
-**Phase 4 완료 조건:** `_workspace/plan.md`의 모든 태스크가 구현되고 전체 테스트가 통과함.
-
----
-
-## Phase 5: Validator 검증 루프
-
-**이 Phase가 dev-team의 핵심이다.** Builder가 구현한 코드를 Validator가 검증하고, 이슈가 있으면 Builder가 수정하는 루프를 반복한다.
-
-### 변수 초기화
-
+스폰 메시지:
 ```
-currentRound = 1
+Builder가 구현을 완료하면 검토 요청 메시지를 보낼 것입니다.
+요청을 받을 때마다 다음 두 레이어를 순차적으로 실행하세요.
+
+[Layer 1] 스펙 Done Criteria 검증 (_workspace/spec.md 존재 시)
+  - Done Criteria 항목을 하나씩 체크: 구현 여부, 테스트 통과, 엣지 케이스 처리
+  - 항목별 PASS/FAIL 기록
+
+[Layer 2] 코드 품질 검증 (4개 에이전트 순차 실행)
+  - code-quality: 코드 스타일, 타입, 아키텍처, 의존성, 에러 처리
+  - security: 민감정보, Injection, XSS, 인증/인가
+  - performance: 복잡도, 불필요한 연산, 메모리, 캐싱
+  - verification: 테스트 품질, 비즈니스 로직, 동시성
+
+결과를 _workspace/review-round-N.md 에 기록하고 Builder에게 SendMessage로 결과를 전달:
+- 모든 항목 통과 시: "[PASS]"
+- Critical/Major 이슈 발견 시: "[ISSUES-FOUND] _workspace/review-round-N.md 참고"
 ```
 
-### 루프 시작
+### 오케스트레이터 대기
 
-다음을 `currentRound <= maxIterations` 동안 반복한다:
+팀을 스폰한 후 **오케스트레이터는 Builder로부터 완료 또는 실패 보고를 기다린다.**
 
----
-
-#### Layer 1: 스펙 Done Criteria 검증
-
-**`_workspace/spec.md`가 존재하는 경우에만 실행한다.**
-
-Validator 팀을 Agent Teams로 스폰하여 다음을 수행한다:
-
-1. `_workspace/spec.md`의 **Done Criteria** 섹션을 읽는다
-2. 체크리스트 항목을 **하나씩** 검증한다:
-   - 해당 기능이 구현되어 있는가?
-   - 관련 테스트가 존재하고 통과하는가?
-   - 엣지 케이스가 처리되어 있는가?
-3. 각 항목의 결과를 PASS / FAIL로 기록한다
-
-**Layer 1 결과를 임시로 보관하고 Layer 2로 진행한다.**
-
----
-
-#### Layer 2: 코드 품질 검증
-
-다음 4개 에이전트를 **순차적으로** 실행한다:
-
-**2-1. Code Quality** (`agents/code-quality.md`)
-- 코드 스타일, 타입 안정성, 아키텍처, 의존성, 에러 처리, 로깅 검사
-
-**2-2. Security** (`agents/security.md`)
-- 민감정보 노출, Injection, XSS, 인증/인가, .gitignore 검사
-
-**2-3. Performance** (`agents/performance.md`)
-- 시간 복잡도, 불필요한 연산, 메모리 낭비, 캐싱 누락 검사
-
-**2-4. Verification** (`agents/verification.md`)
-- 테스트 품질, 비즈니스 로직, 엣지 케이스, 동시성 이슈 검사
-
-각 에이전트는 이슈를 `Critical / Major / Minor` 심각도로 분류한다.
-
----
-
-#### 결과 기록
-
-Layer 1 + Layer 2 결과를 합쳐 `_workspace/review-round-N.md`에 기록한다:
-
-```markdown
-# Review Round N
-
-## Layer 1: 스펙 Done Criteria 검증
-| # | Done Criteria 항목 | 결과 | 비고 |
-|---|-------------------|------|------|
-| 1 | 기능 A가 정상 동작 | PASS | - |
-| 2 | 단위 테스트 통과   | FAIL | 2개 테스트 미작성 |
-
-## Layer 2: 코드 품질 검증
-
-### Code Quality
-(이슈 목록 또는 "이슈 없음")
-
-### Security
-(이슈 목록 또는 "이슈 없음")
-
-### Performance
-(이슈 목록 또는 "이슈 없음")
-
-### Verification
-(이슈 목록 또는 "이슈 없음")
-
-## 종합 판정
-- Critical 이슈: N개
-- Major 이슈: N개
-- Minor 이슈: N개
-- **판정: PASS / FAIL**
-```
-
----
-
-#### 종료 조건 판정
-
-**Exit A — PASS:**
-- Layer 1의 모든 항목이 PASS이고
-- Layer 2에 Critical 또는 Major 이슈가 0개
-
-이 경우 Phase 6으로 진행한다.
-
-**Exit B — maxIterations 도달:**
-- `currentRound > maxIterations`
-
-이 경우 사용자에게 다음을 보고하고 **중단한다:**
+- Builder로부터 "구현 및 검증 완료" 메시지 수신 → Phase 6 진행
+- Builder로부터 "maxIterations 초과" 메시지 수신 → 사용자에게 보고:
 
 ```
-⚠️ 최대 검증 횟수(N회)에 도달했습니다.
+⚠️ 최대 검증 횟수({maxIterations}회)에 도달했습니다.
 
-미해결 이슈:
-- [Critical/Major 이슈 목록]
-
-검토 이력: _workspace/review-round-1.md ~ _workspace/review-round-N.md
+미해결 이슈: _workspace/review-round-N.md 참고
 
 추가 지시를 기다립니다.
 ```
-
-**FAIL — 이슈 발견:**
-- Critical 또는 Major 이슈가 존재하는 경우
-
-Builder에게 수정을 지시한다:
-
-1. `_workspace/review-round-N.md`를 Builder에게 전달
-2. Builder가 Critical/Major 이슈를 수정
-3. Builder가 수정 완료를 보고
-4. `currentRound += 1`
-5. 루프 처음으로 돌아감 (Layer 1부터 재실행)
 
 ---
 
