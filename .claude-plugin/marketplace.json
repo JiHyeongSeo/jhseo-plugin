@@ -94,6 +94,15 @@
       "author": { "name": "SOL Team" },
       "keywords": ["agent-teams", "builder", "validator", "dev-workflow", "tdd", "code-review"],
       "category": "development"
+    },
+    {
+      "name": "drawio-notion",
+      "source": "./plugins/drawio-notion",
+      "description": "draw.io 다이어그램 생성 후 Notion embed 블록으로 자동 삽입. 외부 앱 설치 불필요",
+      "version": "1.0.0",
+      "author": { "name": "SOL Team" },
+      "keywords": ["drawio", "diagram", "notion", "다이어그램", "플로우차트", "아키텍처", "embed"],
+      "category": "productivity"
     }
   ]
 }
