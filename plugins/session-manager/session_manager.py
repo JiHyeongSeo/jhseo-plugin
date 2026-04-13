@@ -127,3 +127,175 @@ def filter_old_sessions(sessions: list[dict], days: int = 30) -> list[dict]:
         except ValueError:
             pass
     return result
+
+
+def print_tree(sessions: list[dict]) -> None:
+    """rich를 사용해 프로젝트별 세션 트리를 출력."""
+    try:
+        from rich.console import Console
+        from rich.tree import Tree
+        use_rich = True
+    except ImportError:
+        use_rich = False
+
+    groups = group_by_project(sessions)
+    if not groups:
+        if use_rich:
+            from rich.console import Console
+            Console().print("[dim]세션이 없습니다.[/dim]")
+        else:
+            print("세션이 없습니다.")
+        return
+
+    if use_rich:
+        from rich.console import Console
+        from rich.tree import Tree
+        console = Console()
+        for project_path, entries in groups.items():
+            tree = Tree(
+                f"[bold blue]{project_path}[/bold blue]  "
+                f"[dim]({len(entries)}개)[/dim]"
+            )
+            for s in entries:
+                date = s.get("modified", "")[:10]
+                summary = s.get("summary", "No summary")[:50]
+                branch = s.get("gitBranch", "")
+                msgs = s.get("messageCount", 0)
+                tree.add(
+                    f"{date}  [green]{summary}[/green]  "
+                    f"[yellow][{branch}][/yellow]  {msgs}msgs"
+                )
+            console.print(tree)
+            console.print()
+    else:
+        # rich 없을 때 폴백
+        for project_path, entries in groups.items():
+            print(f"\n[{project_path}]  ({len(entries)}개)")
+            for i, s in enumerate(entries):
+                date = s.get("modified", "")[:10]
+                summary = s.get("summary", "No summary")[:50]
+                branch = s.get("gitBranch", "")
+                msgs = s.get("messageCount", 0)
+                prefix = "└─" if i == len(entries) - 1 else "├─"
+                print(f"  {prefix} {date}  {summary}  [{branch}]  {msgs}msgs")
+
+
+def install_cli() -> None:
+    """session_manager.py를 ~/.local/bin/claude-sessions 심링크로 설치."""
+    script_path = Path(__file__).resolve()
+    bin_dir = Path.home() / ".local" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    link_path = bin_dir / "claude-sessions"
+
+    if link_path.exists() or link_path.is_symlink():
+        link_path.unlink()
+    link_path.symlink_to(script_path)
+    os.chmod(link_path, 0o755)
+
+    path_dirs = os.environ.get("PATH", "").split(":")
+    in_path = str(bin_dir) in path_dirs
+
+    print(f"설치 완료: {link_path}")
+    print(f"  -> {script_path}")
+    if not in_path:
+        print(f"\n주의: {bin_dir} 이 PATH에 없습니다.")
+        print("다음을 ~/.bashrc 또는 ~/.zshrc에 추가하세요:")
+        print(f'  export PATH="$HOME/.local/bin:$PATH"')
+
+
+def run_fzf(sessions: list[dict]) -> dict | None:
+    """fzf로 세션 선택. Task 6에서 구현됨."""
+    return None
+
+
+def show_action_menu(session: dict) -> None:
+    """선택된 세션의 액션 메뉴. Task 6에서 구현됨."""
+    pass
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="claude-sessions",
+        description="Claude Code 세션 브라우저",
+    )
+    parser.add_argument(
+        "--list", action="store_true",
+        help="fzf 없이 rich 트리로 출력"
+    )
+    parser.add_argument(
+        "--stats", action="store_true",
+        help="전체 통계 요약 출력"
+    )
+    parser.add_argument(
+        "--clean", action="store_true",
+        help="30일 이상 지난 세션 인터랙티브 정리"
+    )
+    parser.add_argument(
+        "--claude-mode", action="store_true",
+        help="Claude 슬래시 커맨드용 평문 텍스트 출력"
+    )
+    parser.add_argument(
+        "--filter", metavar="KEYWORD", default="",
+        help="프로젝트 경로 필터 (--claude-mode, --list에서 사용)"
+    )
+    parser.add_argument(
+        "action", nargs="?", default=None,
+        help="install: ~/.local/bin/claude-sessions 심링크 설치"
+    )
+
+    args = parser.parse_args()
+    sessions = load_all_sessions()
+
+    if args.action == "install":
+        install_cli()
+        return
+
+    if args.claude_mode:
+        print(format_claude_output(sessions, filter_str=args.filter))
+        return
+
+    if args.stats:
+        print(format_stats(sessions))
+        return
+
+    if args.list:
+        if args.filter:
+            sessions = [
+                s for s in sessions
+                if args.filter.lower() in s.get("projectPath", "").lower()
+            ]
+        print_tree(sessions)
+        return
+
+    if args.clean:
+        old = filter_old_sessions(sessions, days=30)
+        if not old:
+            print("30일 이상 지난 세션이 없습니다.")
+            return
+        print(f"30일 이상 지난 세션 {len(old)}개:")
+        for s in old:
+            print(f"  {s.get('modified', '')[:10]}  {s.get('summary', '')[:50]}")
+        confirm = input("\n모두 삭제하시겠습니까? (y/N) ").strip().lower()
+        if confirm == "y":
+            for s in old:
+                delete_session(s)
+            print(f"{len(old)}개 삭제 완료.")
+        return
+
+    # 기본: fzf 인터랙티브 모드
+    if not shutil.which("fzf"):
+        print("fzf가 설치되지 않았습니다. --list 모드로 전환합니다.")
+        print("fzf 설치: sudo apt install fzf  또는  brew install fzf")
+        print()
+        print_tree(sessions)
+        return
+
+    selected = run_fzf(sessions)
+    if selected:
+        show_action_menu(selected)
+
+
+if __name__ == "__main__":
+    main()
