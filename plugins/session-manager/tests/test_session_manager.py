@@ -122,3 +122,89 @@ class TestGroupByProject:
         groups = session_manager.group_by_project([session])
 
         assert "unknown" in groups
+
+
+class TestFormatSessionLine:
+    def test_contains_session_id(self):
+        s = make_session("abc-999")
+        line = session_manager.format_session_line(s)
+        assert "abc-999" in line
+
+    def test_contains_summary(self):
+        s = make_session(summary="My important session")
+        line = session_manager.format_session_line(s)
+        assert "My important session" in line
+
+    def test_contains_branch(self):
+        s = make_session(branch="feat/login")
+        line = session_manager.format_session_line(s)
+        assert "feat/login" in line
+
+    def test_contains_message_count(self):
+        s = make_session(msgs=42)
+        line = session_manager.format_session_line(s)
+        assert "42" in line
+
+    def test_session_id_is_last_token(self):
+        s = make_session("unique-id-xyz")
+        line = session_manager.format_session_line(s)
+        assert line.split()[-1] == "unique-id-xyz"
+
+    def test_truncates_long_summary(self):
+        s = make_session(summary="x" * 100)
+        line = session_manager.format_session_line(s)
+        assert len(line) < 300
+
+
+class TestFormatClaudeOutput:
+    def test_contains_project_path(self):
+        sessions = [make_session("s1", project="/home/user/myproject")]
+        output = session_manager.format_claude_output(sessions)
+        assert "/home/user/myproject" in output
+
+    def test_contains_summary(self):
+        sessions = [make_session(summary="Important work done")]
+        output = session_manager.format_claude_output(sessions)
+        assert "Important work done" in output
+
+    def test_total_count_in_header(self):
+        sessions = [make_session("s1"), make_session("s2")]
+        output = session_manager.format_claude_output(sessions)
+        assert "2" in output
+
+    def test_filter_excludes_other_projects(self):
+        sessions = [
+            make_session("s1", project="/home/user/project-a"),
+            make_session("s2", project="/home/user/project-b"),
+        ]
+        output = session_manager.format_claude_output(sessions, filter_str="project-a")
+        assert "project-a" in output
+        assert "project-b" not in output
+
+    def test_empty_filter_shows_all(self):
+        sessions = [
+            make_session("s1", project="/home/user/project-a"),
+            make_session("s2", project="/home/user/project-b"),
+        ]
+        output = session_manager.format_claude_output(sessions, filter_str="")
+        assert "project-a" in output
+        assert "project-b" in output
+
+
+class TestFormatStats:
+    def test_shows_total_session_count(self):
+        sessions = [make_session("s1"), make_session("s2"), make_session("s3")]
+        stats = session_manager.format_stats(sessions)
+        assert "3" in stats
+
+    def test_shows_total_project_count(self):
+        sessions = [
+            make_session("s1", project="/home/user/a"),
+            make_session("s2", project="/home/user/b"),
+        ]
+        stats = session_manager.format_stats(sessions)
+        assert "2" in stats
+
+    def test_empty_sessions(self):
+        stats = session_manager.format_stats([])
+        assert "0" in stats
