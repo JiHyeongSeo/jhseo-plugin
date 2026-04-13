@@ -350,13 +350,8 @@ def format_session_preview(session: dict) -> str:
 
     messages = []
     msg_count = 0
-    MAX_MSGS = 50  # 스크롤 탐색 가능하도록 충분히
-
     try:
         for line in full_path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if msg_count >= MAX_MSGS:
-                messages.append("\n... (이하 생략)")
-                break
             try:
                 record = json.loads(line)
             except json.JSONDecodeError:
@@ -383,6 +378,7 @@ def format_session_preview(session: dict) -> str:
             prefix = "👤" if rtype == "user" else "🤖"
             messages.append(f"\n{prefix} {text[:250]}")
             msg_count += 1
+
     except OSError:
         messages.append("[파일 읽기 오류]")
 
