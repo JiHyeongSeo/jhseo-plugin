@@ -97,10 +97,12 @@ def load_all_sessions() -> list[dict]:
     indexed_dirs: set[Path] = set()
 
     for index_file in PROJECTS_DIR.glob("*/sessions-index.json"):
-        indexed_dirs.add(index_file.parent)
         try:
             data = json.loads(index_file.read_text(encoding="utf-8"))
-            sessions.extend(data.get("entries", []))
+            entries = data.get("entries", [])
+            if entries:
+                indexed_dirs.add(index_file.parent)
+                sessions.extend(entries)
         except (json.JSONDecodeError, OSError):
             pass
 
