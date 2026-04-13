@@ -103,6 +103,17 @@
       "author": { "name": "SOL Team" },
       "keywords": ["drawio", "diagram", "notion", "다이어그램", "플로우차트", "아키텍처", "embed"],
       "category": "productivity"
+    },
+    {
+      "name": "session-manager",
+      "source": "./plugins/session-manager",
+      "description": "Claude Code 세션 브라우저. 프로젝트별 트리 탐색, fzf 검색, resume/삭제 관리",
+      "version": "1.0.0",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["session", "resume", "browser", "fzf", "세션", "세션관리"],
+      "category": "productivity"
     }
   ]
 }
