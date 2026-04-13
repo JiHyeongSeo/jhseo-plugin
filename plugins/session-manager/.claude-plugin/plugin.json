@@ -1,0 +1,18 @@
+{
+  "name": "session-manager",
+  "description": "Claude Code 세션 브라우저. 프로젝트별 트리 탐색, fzf 검색, resume/삭제 관리",
+  "version": "1.0.0",
+  "author": {
+    "name": "SOL Team"
+  },
+  "homepage": "https://gitlab.nexon.com/da_div/SOL/claude-plugins",
+  "repository": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git",
+  "keywords": [
+    "session",
+    "resume",
+    "browser",
+    "fzf",
+    "세션",
+    "세션관리"
+  ]
+}
