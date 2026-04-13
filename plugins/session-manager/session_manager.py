@@ -3,12 +3,14 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
+TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
 
 
 def parse_jsonl_session(jsonl_path: Path) -> dict | None:
@@ -109,6 +111,14 @@ def load_all_sessions() -> list[dict]:
             if session:
                 sessions.append(session)
 
+    # 사용자 정의 제목 오버라이드 적용
+    overrides = load_title_overrides()
+    if overrides:
+        for s in sessions:
+            sid = s.get("sessionId", "")
+            if sid in overrides:
+                s["summary"] = overrides[sid]
+
     return sessions
 
 
@@ -123,11 +133,45 @@ def group_by_project(sessions: list[dict]) -> dict[str, list[dict]]:
     return dict(sorted(groups.items()))
 
 
+def clean_summary(text: str) -> str:
+    """XML 태그, 개행 등 불필요한 문자 제거."""
+    text = re.sub(r"<[^>]+>", " ", text)  # 완전한 XML 태그 → 공백
+    text = re.sub(r"<[^>]*$", "", text)   # 끝에 잘린 불완전 태그 제거
+    text = " ".join(text.split())          # 연속 공백·개행 → 단일 공백
+    return text.strip()
+
+
+def load_title_overrides() -> dict[str, str]:
+    """사용자 정의 세션 제목 오버라이드 로드."""
+    try:
+        return json.loads(TITLE_OVERRIDES_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_title_override(session_id: str, title: str) -> None:
+    """사용자 정의 제목 저장."""
+    overrides = load_title_overrides()
+    overrides[session_id] = title
+    TITLE_OVERRIDES_FILE.write_text(
+        json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def get_display_summary(session: dict) -> str:
+    """표시용 요약 반환. XML 정제 + 제목 없으면 [제목 없음] 표시."""
+    raw = session.get("summary", "") or session.get("firstPrompt", "")
+    cleaned = clean_summary(raw)
+    if not cleaned or cleaned == "No summary":
+        return "[제목 없음]"
+    return cleaned
+
+
 def format_session_line(session: dict) -> str:
     """세션을 fzf 입력용 한 줄 문자열로 변환. 마지막 토큰은 반드시 sessionId."""
     date = session.get("modified", "")[:10]
     project = session.get("projectPath", "?").split("/")[-1]
-    summary = session.get("summary", session.get("firstPrompt", "No summary"))[:60]
+    summary = get_display_summary(session)[:60]
     branch = session.get("gitBranch", "")
     msgs = session.get("messageCount", 0)
     session_id = session.get("sessionId", "")
@@ -144,7 +188,7 @@ def format_claude_output(sessions: list[dict], filter_str: str = "") -> str:
         lines.append(f"\n### {project_path} ({len(entries)}개)")
         for s in entries:
             date = s.get("modified", "")[:10]
-            summary = s.get("summary", "No summary")[:60]
+            summary = get_display_summary(s)[:60]
             branch = s.get("gitBranch", "")
             msgs = s.get("messageCount", 0)
             lines.append(f"- {date}  {summary}  [{branch}]  {msgs}msgs")
@@ -246,7 +290,7 @@ def print_tree(sessions: list[dict]) -> None:
             )
             for s in entries:
                 date = s.get("modified", "")[:10]
-                summary = s.get("summary", "No summary")[:50]
+                summary = get_display_summary(s)[:50]
                 branch = s.get("gitBranch", "")
                 msgs = s.get("messageCount", 0)
                 tree.add(
@@ -261,7 +305,7 @@ def print_tree(sessions: list[dict]) -> None:
             print(f"\n[{project_path}]  ({len(entries)}개)")
             for i, s in enumerate(entries):
                 date = s.get("modified", "")[:10]
-                summary = s.get("summary", "No summary")[:50]
+                summary = get_display_summary(s)[:50]
                 branch = s.get("gitBranch", "")
                 msgs = s.get("messageCount", 0)
                 prefix = "└─" if i == len(entries) - 1 else "├─"
@@ -291,21 +335,78 @@ def install_cli() -> None:
         print(f'  export PATH="$HOME/.local/bin:$PATH"')
 
 
+def format_session_preview(session: dict) -> str:
+    """세션 대화 내용을 fzf 미리보기용으로 포맷."""
+    full_path = Path(session.get("fullPath", ""))
+    header = [
+        f"프로젝트: {session.get('projectPath', '')}",
+        f"날짜:     {session.get('modified', '')[:10]}  |  메시지: {session.get('messageCount', 0)}개",
+        f"제목:     {get_display_summary(session)}",
+        "─" * 60,
+    ]
+
+    if not full_path.exists():
+        return "\n".join(header + ["[세션 파일 없음]"])
+
+    messages = []
+    msg_count = 0
+    MAX_MSGS = 8  # 최대 4 왕복
+
+    try:
+        for line in full_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if msg_count >= MAX_MSGS:
+                messages.append("\n... (이하 생략)")
+                break
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            rtype = record.get("type", "")
+            if rtype not in ("user", "assistant"):
+                continue
+
+            content = record.get("message", {}).get("content", [])
+            text = ""
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text = part.get("text", "")
+                        break
+            elif isinstance(content, str):
+                text = content
+
+            text = clean_summary(text)
+            if not text:
+                continue
+
+            prefix = "👤" if rtype == "user" else "🤖"
+            messages.append(f"\n{prefix} {text[:250]}")
+            msg_count += 1
+    except OSError:
+        messages.append("[파일 읽기 오류]")
+
+    return "\n".join(header + messages)
+
+
 def run_fzf(sessions: list[dict]) -> dict | None:
     """fzf로 세션 선택. 취소하면 None 반환."""
     lines = [format_session_line(s) for s in sessions]
     id_map = {s["sessionId"]: s for s in sessions}
+    script_path = Path(__file__).resolve()
 
     try:
         result = subprocess.run(
             [
                 "fzf",
                 "--ansi",
-                "--height=60%",
+                "--height=90%",
                 "--layout=reverse",
                 "--border",
                 "--prompt=세션 검색> ",
                 "--header=Enter:선택  Ctrl-C:취소",
+                f"--preview=python3 {script_path} --preview-id {{last}}",
+                "--preview-window=right:50%:wrap",
             ],
             input="\n".join(lines),
             capture_output=True,
@@ -325,13 +426,14 @@ def run_fzf(sessions: list[dict]) -> dict | None:
 
 def show_action_menu(session: dict) -> None:
     """선택된 세션의 액션 메뉴를 표시하고 실행."""
+    summary = get_display_summary(session)
     print()
-    print(f"  세션: {session.get('summary', '')[:60]}")
+    print(f"  세션: {summary[:60]}")
     print(f"  프로젝트: {session.get('projectPath', '')}")
     print(f"  날짜: {session.get('modified', '')[:10]}")
     print(f"  ID: {session.get('sessionId', '')}")
     print()
-    print("  r) Resume    d) Delete    v) View details    q) Quit")
+    print("  r) Resume    d) Delete    v) View details    p) Preview    t) Edit title    q) Quit")
     print()
 
     try:
@@ -350,7 +452,7 @@ def show_action_menu(session: dict) -> None:
     elif choice == "d":
         try:
             confirm = input(
-                f"  '{session.get('summary', '')[:40]}' 를 삭제하시겠습니까? (y/N) "
+                f"  '{summary[:40]}' 를 삭제하시겠습니까? (y/N) "
             ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
@@ -361,14 +463,33 @@ def show_action_menu(session: dict) -> None:
 
     elif choice == "v":
         print()
-        print(f"  Summary     : {session.get('summary', '')}")
-        print(f"  First prompt: {session.get('firstPrompt', '')[:100]}")
+        print(f"  Summary     : {summary}")
+        print(f"  First prompt: {clean_summary(session.get('firstPrompt', ''))[:120]}")
         print(f"  Created     : {session.get('created', '')}")
         print(f"  Modified    : {session.get('modified', '')}")
         print(f"  Branch      : {session.get('gitBranch', '')}")
         print(f"  Messages    : {session.get('messageCount', 0)}")
         print(f"  Session ID  : {session.get('sessionId', '')}")
         print(f"  Project     : {session.get('projectPath', '')}")
+
+    elif choice == "p":
+        preview = format_session_preview(session)
+        try:
+            pager = subprocess.Popen(["less", "-R"], stdin=subprocess.PIPE)
+            pager.communicate(input=preview.encode("utf-8"))
+        except (OSError, subprocess.SubprocessError):
+            print(preview)
+
+    elif choice == "t":
+        try:
+            new_title = input(f"  새 제목 (현재: {summary[:40]}): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if new_title:
+            save_title_override(session.get("sessionId", ""), new_title)
+            session["summary"] = new_title
+            print(f"  제목 저장됨: {new_title}")
 
 
 def main() -> None:
@@ -399,11 +520,26 @@ def main() -> None:
         help="프로젝트 경로 필터 (--claude-mode, --list에서 사용)"
     )
     parser.add_argument(
+        "--preview-id", metavar="SESSION_ID",
+        help="fzf 미리보기용: 해당 세션 내용 출력"
+    )
+    parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/claude-sessions 심링크 설치"
     )
 
     args = parser.parse_args()
+
+    # fzf preview 모드: 빠르게 출력 후 종료
+    if args.preview_id:
+        sessions = load_all_sessions()
+        session = next((s for s in sessions if s.get("sessionId") == args.preview_id), None)
+        if session:
+            print(format_session_preview(session))
+        else:
+            print(f"세션을 찾을 수 없습니다: {args.preview_id}")
+        return
+
     sessions = load_all_sessions()
 
     if args.action == "install":
@@ -450,9 +586,12 @@ def main() -> None:
         print_tree(sessions)
         return
 
-    selected = run_fzf(sessions)
-    if selected:
+    while True:
+        selected = run_fzf(sessions)
+        if selected is None:
+            break
         show_action_menu(selected)
+        sessions = load_all_sessions()  # 삭제·제목 변경 후 갱신
 
 
 if __name__ == "__main__":
