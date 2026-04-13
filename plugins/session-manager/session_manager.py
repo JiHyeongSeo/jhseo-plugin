@@ -390,13 +390,26 @@ def format_session_preview(session: dict) -> str:
 
 
 def run_fzf(sessions: list[dict]) -> dict | None:
-    """fzf로 세션 선택. 취소하면 None 반환."""
+    """fzf로 세션 선택 후 resume할 세션 반환. 취소하면 None."""
+    import tempfile
+
     lines = [format_session_line(s) for s in sessions]
     id_map = {s["sessionId"]: s for s in sessions}
     script_path = Path(__file__).resolve()
 
+    cache_file = None
+    action_file = None
     try:
-        result = subprocess.run(
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, encoding="utf-8"
+        ) as tf:
+            json.dump(sessions, tf, ensure_ascii=False)
+            cache_file = tf.name
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as af:
+            action_file = af.name
+
+        subprocess.run(
             [
                 "fzf",
                 "--ansi",
@@ -404,24 +417,47 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--layout=reverse",
                 "--border",
                 "--prompt=세션 검색> ",
-                "--header=Enter:선택  Ctrl-C:취소",
-                f"--preview=python3 {script_path} --preview-id {{last}}",
+                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  Ctrl-P:미리보기토글  Ctrl-C:닫기",
+                f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file}",
                 "--preview-window=right:50%:wrap",
+                # Enter: 선택한 세션 ID를 파일에 기록 후 fzf 종료
+                f"--bind=enter:execute-silent(echo resume:{{-1}} > {action_file})+abort",
+                # Ctrl-D: 삭제 (인터랙티브 확인) + 목록 갱신
+                (
+                    f"--bind=ctrl-d:execute(python3 {script_path}"
+                    f" --fzf-action delete {{-1}} --sessions-cache {cache_file})"
+                    f"+reload(python3 {script_path} --fzf-list-lines)"
+                ),
+                # Ctrl-T: 제목 편집 (인터랙티브) + 목록 갱신
+                (
+                    f"--bind=ctrl-t:execute(python3 {script_path}"
+                    f" --fzf-action edit-title {{-1}} --sessions-cache {cache_file})"
+                    f"+reload(python3 {script_path} --fzf-list-lines)"
+                ),
+                # Ctrl-P: 미리보기 패널 토글
+                "--bind=ctrl-p:toggle-preview",
             ],
             input="\n".join(lines),
             capture_output=True,
             text=True,
         )
-        if result.returncode != 0:
-            return None
-        selected_line = result.stdout.strip()
-        if not selected_line:
-            return None
-        # 마지막 토큰이 sessionId
-        session_id = selected_line.split()[-1]
-        return id_map.get(session_id)
+
+        # Enter로 선택 시 action 파일에 기록된 세션 ID 확인
+        action_path = Path(action_file)
+        if action_path.exists():
+            content = action_path.read_text().strip()
+            if content.startswith("resume:"):
+                session_id = content[len("resume:"):]
+                return id_map.get(session_id)
+
+        return None
     except (subprocess.SubprocessError, OSError, FileNotFoundError):
         return None
+    finally:
+        if cache_file:
+            Path(cache_file).unlink(missing_ok=True)
+        if action_file:
+            Path(action_file).unlink(missing_ok=True)
 
 
 def show_action_menu(session: dict) -> None:
@@ -523,6 +559,12 @@ def main() -> None:
         "--preview-id", metavar="SESSION_ID",
         help="fzf 미리보기용: 해당 세션 내용 출력"
     )
+    parser.add_argument("--sessions-cache", metavar="PATH", help=argparse.SUPPRESS)
+    parser.add_argument("--fzf-list-lines", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--fzf-action", nargs="+", metavar=("ACTION", "SESSION_ID"),
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/claude-sessions 심링크 설치"
@@ -530,14 +572,71 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # fzf preview 모드: 빠르게 출력 후 종료
+    # fzf preview 모드: 캐시에서 빠르게 조회 후 출력
     if args.preview_id:
-        sessions = load_all_sessions()
+        if args.sessions_cache:
+            try:
+                sessions = json.loads(
+                    Path(args.sessions_cache).read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                sessions = load_all_sessions()
+        else:
+            sessions = load_all_sessions()
         session = next((s for s in sessions if s.get("sessionId") == args.preview_id), None)
         if session:
             print(format_session_preview(session))
         else:
             print(f"세션을 찾을 수 없습니다: {args.preview_id}")
+        return
+
+    # fzf reload용: 최신 세션 목록 한 줄씩 출력
+    if args.fzf_list_lines:
+        for s in load_all_sessions():
+            print(format_session_line(s))
+        return
+
+    # fzf execute용: delete / edit-title 액션 처리
+    if args.fzf_action:
+        fzf_action_name = args.fzf_action[0]
+        fzf_session_id = args.fzf_action[1] if len(args.fzf_action) > 1 else ""
+
+        if args.sessions_cache:
+            try:
+                cached = json.loads(
+                    Path(args.sessions_cache).read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                cached = load_all_sessions()
+        else:
+            cached = load_all_sessions()
+
+        target = next((s for s in cached if s.get("sessionId") == fzf_session_id), None)
+        if not target:
+            print(f"\n  세션을 찾을 수 없습니다: {fzf_session_id}")
+            return
+
+        summary = get_display_summary(target)
+
+        if fzf_action_name == "delete":
+            try:
+                confirm = input(f"\n  삭제: '{summary[:40]}' (y/N) ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+            if confirm == "y":
+                delete_session(target)
+                print("  삭제 완료.")
+
+        elif fzf_action_name == "edit-title":
+            try:
+                new_title = input(f"\n  새 제목 (현재: {summary[:40]}): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+            if new_title:
+                save_title_override(fzf_session_id, new_title)
+                print(f"  저장됨: {new_title}")
         return
 
     sessions = load_all_sessions()
@@ -586,12 +685,13 @@ def main() -> None:
         print_tree(sessions)
         return
 
-    while True:
-        selected = run_fzf(sessions)
-        if selected is None:
-            break
-        show_action_menu(selected)
-        sessions = load_all_sessions()  # 삭제·제목 변경 후 갱신
+    selected = run_fzf(sessions)
+    if selected:
+        project_path = selected.get("projectPath", "")
+        session_id = selected.get("sessionId", "")
+        cmd = f'cd "{project_path}" && claude resume {session_id}'
+        print(f"\n실행: {cmd}\n")
+        os.execlp("bash", "bash", "-c", cmd)
 
 
 if __name__ == "__main__":
