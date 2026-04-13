@@ -417,7 +417,7 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--layout=reverse",
                 "--border",
                 "--prompt=세션 검색> ",
-                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  →:미리보기진입(↑↓스크롤 ←복귀)  Ctrl-P:토글  Ctrl-C:닫기",
+                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  →/←:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
                 f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file}",
                 "--preview-window=right:50%:wrap",
                 # Enter: 선택한 세션 ID를 파일에 기록 후 fzf 종료
@@ -436,20 +436,11 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 ),
                 # Ctrl-P: 미리보기 패널 토글
                 "--bind=ctrl-p:toggle-preview",
-                # up/down 초기 바인딩 명시 (rebind 복원 기준점)
-                "--bind=up:up",
-                "--bind=down:down",
-                # →: 미리보기 포커스 모드 (up/down → preview 스크롤, ← → 리스트 복귀)
-                (
-                    "--bind=right:"
-                    "bind(up:preview-up)+bind(down:preview-down)+"
-                    "bind(left:rebind(up,down,right)+unbind(left)+change-preview-window(right:50%:wrap))+"
-                    "unbind(right)+"
-                    "change-preview-window(right:70%:wrap)"
-                ),
+                # →/←: 미리보기 패널 스크롤 (↑↓는 리스트 탐색 유지)
+                "--bind=right:preview-down",
+                "--bind=left:preview-up",
             ],
             input="\n".join(lines),
-            capture_output=True,
             text=True,
         )
 
