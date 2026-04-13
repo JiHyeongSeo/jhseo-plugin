@@ -428,8 +428,8 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  →/←:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
                 f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file}",
                 "--preview-window=right:50%:wrap",
-                # Enter: 선택한 세션 ID를 파일에 기록 후 fzf 종료
-                f"--bind=enter:execute-silent(echo resume:{{-1}} > {action_file})+abort",
+                # Enter: 선택한 세션 ID를 파일에 기록 후 fzf 종료 (execute로 블로킹 보장)
+                f"--bind=enter:execute(printf 'resume:%s' {{-1}} > {action_file} 2>/dev/null)+abort",
                 # Ctrl-D: 삭제 (인터랙티브 확인) + 목록 갱신
                 (
                     f"--bind=ctrl-d:execute(python3 {script_path}"
@@ -693,8 +693,14 @@ def main() -> None:
     if selected:
         project_path = selected.get("projectPath", "")
         session_id = selected.get("sessionId", "")
+        summary = get_display_summary(selected)
+        print(f"\n{'─' * 60}")
+        print(f"  Resume 세션")
+        print(f"  제목    : {summary[:55]}")
+        print(f"  프로젝트: {project_path}")
+        print(f"  ID      : {session_id}")
+        print(f"{'─' * 60}\n")
         cmd = f'cd "{project_path}" && claude resume {session_id}'
-        print(f"\n실행: {cmd}\n")
         os.execlp("bash", "bash", "-c", cmd)
 
 
