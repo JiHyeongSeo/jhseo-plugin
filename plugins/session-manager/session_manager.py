@@ -60,7 +60,8 @@ def parse_jsonl_session(jsonl_path: Path) -> dict | None:
             elif isinstance(content, str):
                 text = content
             # Claude Code 자동 삽입 시스템 메시지 건너뜀
-            if not text.startswith("Caveat:"):
+            # 실제 포맷: <local-command-caveat>Caveat: ...
+            if "Caveat:" not in text[:100]:
                 first_prompt = text[:200]
             if record.get("parentUuid") is not None:
                 is_sidechain = True
