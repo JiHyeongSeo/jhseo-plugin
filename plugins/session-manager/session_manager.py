@@ -204,13 +204,83 @@ def install_cli() -> None:
 
 
 def run_fzf(sessions: list[dict]) -> dict | None:
-    """fzf로 세션 선택. Task 6에서 구현됨."""
-    return None
+    """fzf로 세션 선택. 취소하면 None 반환."""
+    lines = [format_session_line(s) for s in sessions]
+    id_map = {s["sessionId"]: s for s in sessions}
+
+    try:
+        result = subprocess.run(
+            [
+                "fzf",
+                "--ansi",
+                "--height=60%",
+                "--layout=reverse",
+                "--border",
+                "--prompt=세션 검색> ",
+                "--header=Enter:선택  Ctrl-C:취소",
+            ],
+            input="\n".join(lines),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        selected_line = result.stdout.strip()
+        if not selected_line:
+            return None
+        # 마지막 토큰이 sessionId
+        session_id = selected_line.split()[-1]
+        return id_map.get(session_id)
+    except (subprocess.SubprocessError, OSError, FileNotFoundError):
+        return None
 
 
 def show_action_menu(session: dict) -> None:
-    """선택된 세션의 액션 메뉴. Task 6에서 구현됨."""
-    pass
+    """선택된 세션의 액션 메뉴를 표시하고 실행."""
+    print()
+    print(f"  세션: {session.get('summary', '')[:60]}")
+    print(f"  프로젝트: {session.get('projectPath', '')}")
+    print(f"  날짜: {session.get('modified', '')[:10]}")
+    print(f"  ID: {session.get('sessionId', '')}")
+    print()
+    print("  r) Resume    d) Delete    v) View details    q) Quit")
+    print()
+
+    try:
+        choice = input("  선택> ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+
+    if choice == "r":
+        project_path = session.get("projectPath", "")
+        session_id = session.get("sessionId", "")
+        cmd = f'cd "{project_path}" && claude resume {session_id}'
+        print(f"\n실행: {cmd}\n")
+        os.execlp("bash", "bash", "-c", cmd)
+
+    elif choice == "d":
+        try:
+            confirm = input(
+                f"  '{session.get('summary', '')[:40]}' 를 삭제하시겠습니까? (y/N) "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if confirm == "y":
+            delete_session(session)
+            print("  삭제 완료.")
+
+    elif choice == "v":
+        print()
+        print(f"  Summary     : {session.get('summary', '')}")
+        print(f"  First prompt: {session.get('firstPrompt', '')[:100]}")
+        print(f"  Created     : {session.get('created', '')}")
+        print(f"  Modified    : {session.get('modified', '')}")
+        print(f"  Branch      : {session.get('gitBranch', '')}")
+        print(f"  Messages    : {session.get('messageCount', 0)}")
+        print(f"  Session ID  : {session.get('sessionId', '')}")
+        print(f"  Project     : {session.get('projectPath', '')}")
 
 
 def main() -> None:
