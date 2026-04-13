@@ -491,7 +491,7 @@ def show_action_menu(session: dict) -> None:
     if choice == "r":
         project_path = session.get("projectPath", "")
         session_id = session.get("sessionId", "")
-        cmd = f'cd "{project_path}" && claude resume {session_id}'
+        cmd = f'cd "{project_path}" && claude --resume {session_id}'
         print(f"\n실행: {cmd}\n")
         os.execlp("bash", "bash", "-c", cmd)
 
@@ -700,7 +700,7 @@ def main() -> None:
         print(f"  프로젝트: {project_path}")
         print(f"  ID      : {session_id}")
         print(f"{'─' * 60}\n")
-        cmd = f'cd "{project_path}" && claude resume {session_id}'
+        cmd = f'cd "{project_path}" && claude --resume {session_id}'
         os.execlp("bash", "bash", "-c", cmd)
 
 
