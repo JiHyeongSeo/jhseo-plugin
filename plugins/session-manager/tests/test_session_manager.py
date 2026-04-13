@@ -208,3 +208,86 @@ class TestFormatStats:
     def test_empty_sessions(self):
         stats = session_manager.format_stats([])
         assert "0" in stats
+
+
+class TestDeleteSession:
+    def test_removes_jsonl_file(self, tmp_path):
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        jsonl = proj / "s1.jsonl"
+        jsonl.write_text("mock data")
+        index = proj / "sessions-index.json"
+        index.write_text(json.dumps({"version": 1, "entries": []}))
+
+        session_manager.delete_session(make_session("s1", full_path=str(jsonl)))
+
+        assert not jsonl.exists()
+
+    def test_removes_entry_from_index(self, tmp_path):
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        jsonl = proj / "s1.jsonl"
+        jsonl.write_text("mock data")
+        entries = [
+            make_session("s1", full_path=str(jsonl)),
+            make_session("s2", full_path=str(proj / "s2.jsonl")),
+        ]
+        index = proj / "sessions-index.json"
+        index.write_text(json.dumps({"version": 1, "entries": entries}))
+
+        session_manager.delete_session(entries[0])
+
+        remaining = json.loads(index.read_text())["entries"]
+        assert len(remaining) == 1
+        assert remaining[0]["sessionId"] == "s2"
+
+    def test_does_not_raise_if_jsonl_missing(self, tmp_path):
+        proj = tmp_path / "proj"
+        proj.mkdir()
+        index = proj / "sessions-index.json"
+        index.write_text(json.dumps({"version": 1, "entries": []}))
+
+        s = make_session("ghost", full_path=str(proj / "ghost.jsonl"))
+        session_manager.delete_session(s)  # should not raise
+
+    def test_does_not_raise_if_index_missing(self, tmp_path):
+        jsonl = tmp_path / "s1.jsonl"
+        jsonl.write_text("mock")
+        s = make_session("s1", full_path=str(jsonl))
+        session_manager.delete_session(s)  # should not raise
+        assert not jsonl.exists()
+
+
+class TestFilterOldSessions:
+    def test_returns_sessions_older_than_days(self):
+        from datetime import datetime, timezone, timedelta
+
+        old = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
+        new = datetime.now(timezone.utc).isoformat()
+        sessions = [
+            make_session("old", modified=old),
+            make_session("new", modified=new),
+        ]
+
+        result = session_manager.filter_old_sessions(sessions, days=30)
+
+        assert len(result) == 1
+        assert result[0]["sessionId"] == "old"
+
+    def test_returns_empty_if_all_recent(self):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        sessions = [make_session("s1", modified=now)]
+
+        result = session_manager.filter_old_sessions(sessions, days=30)
+
+        assert result == []
+
+    def test_skips_entries_with_no_modified(self):
+        s = make_session("s1")
+        s.pop("modified")
+
+        result = session_manager.filter_old_sessions([s], days=30)
+
+        assert result == []

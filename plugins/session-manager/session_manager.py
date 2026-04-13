@@ -82,3 +82,48 @@ def format_stats(sessions: list[dict]) -> str:
             f"가장 활발한 프로젝트: {most_active[0]} ({len(most_active[1])}개 세션)"
         )
     return "\n".join(lines)
+
+
+def delete_session(session: dict) -> None:
+    """세션 .jsonl 파일 삭제 + sessions-index.json에서 항목 제거."""
+    full_path = Path(session.get("fullPath", ""))
+    session_id = session.get("sessionId", "")
+
+    # .jsonl 파일 삭제
+    try:
+        if full_path.exists():
+            full_path.unlink()
+    except OSError:
+        pass
+
+    # sessions-index.json 업데이트
+    index_path = full_path.parent / "sessions-index.json"
+    try:
+        if index_path.exists():
+            data = json.loads(index_path.read_text(encoding="utf-8"))
+            data["entries"] = [
+                e for e in data.get("entries", [])
+                if e.get("sessionId") != session_id
+            ]
+            index_path.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+    except (json.JSONDecodeError, OSError):
+        pass
+
+
+def filter_old_sessions(sessions: list[dict], days: int = 30) -> list[dict]:
+    """modified 기준으로 days일 이상 지난 세션 목록 반환."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    result = []
+    for s in sessions:
+        modified = s.get("modified", "")
+        if not modified:
+            continue
+        try:
+            dt = datetime.fromisoformat(modified.replace("Z", "+00:00"))
+            if dt < cutoff:
+                result.append(s)
+        except ValueError:
+            pass
+    return result
