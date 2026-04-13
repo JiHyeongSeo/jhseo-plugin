@@ -31,5 +31,5 @@ python3 ${CLAUDE_PLUGIN_ROOT}/session_manager.py install
 
 ## 출력 후
 
-- 세션 목록을 보여준 뒤, 사용자가 특정 세션 ID나 이름을 언급하면 `claude resume <sessionId>` 명령어를 안내합니다.
+- 세션 목록을 보여준 뒤, 사용자가 특정 세션 ID나 이름을 언급하면 `claude --resume <sessionId>` 명령어를 안내합니다.
 - 삭제 요청은 터미널에서 `claude-sessions` 도구를 사용하도록 안내합니다.
