@@ -11,15 +11,104 @@ from pathlib import Path
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 
+def parse_jsonl_session(jsonl_path: Path) -> dict | None:
+    """sessions-index.json 없는 프로젝트의 .jsonl 파일에서 세션 메타데이터 추출."""
+    try:
+        lines = jsonl_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+
+    session_id = jsonl_path.stem
+    project_path = ""
+    first_prompt = ""
+    summary = ""
+    created = ""
+    msg_count = 0
+    is_sidechain = False
+
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        rtype = record.get("type", "")
+
+        if not project_path and "cwd" in record:
+            project_path = record["cwd"]
+
+        if "sessionId" in record:
+            session_id = record["sessionId"]
+
+        if not created and rtype == "queue-operation" and record.get("operation") == "enqueue":
+            created = record.get("timestamp", "")
+
+        if rtype == "ai-title":
+            summary = record.get("aiTitle", "")
+
+        if not first_prompt and rtype == "user":
+            content = record.get("message", {}).get("content", [])
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        first_prompt = part.get("text", "")[:200]
+                        break
+            elif isinstance(content, str):
+                first_prompt = content[:200]
+            if record.get("parentUuid") is not None:
+                is_sidechain = True
+
+        if rtype in ("user", "assistant"):
+            msg_count += 1
+
+    if not project_path:
+        return None
+
+    stat = jsonl_path.stat()
+    modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+    if not created:
+        created = datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat()
+
+    return {
+        "sessionId": session_id,
+        "fullPath": str(jsonl_path),
+        "fileMtime": int(stat.st_mtime * 1000),
+        "firstPrompt": first_prompt,
+        "summary": summary or first_prompt[:60] or "No summary",
+        "messageCount": msg_count,
+        "created": created,
+        "modified": modified,
+        "gitBranch": "",
+        "projectPath": project_path,
+        "isSidechain": is_sidechain,
+    }
+
+
 def load_all_sessions() -> list[dict]:
-    """~/.claude/projects/*/sessions-index.json 에서 모든 세션 엔트리를 읽어 반환."""
+    """~/.claude/projects/ 아래 모든 세션을 반환.
+
+    sessions-index.json이 있는 프로젝트는 인덱스에서,
+    없는 프로젝트는 .jsonl 파일을 직접 파싱해서 로드.
+    """
     sessions = []
+    indexed_dirs: set[Path] = set()
+
     for index_file in PROJECTS_DIR.glob("*/sessions-index.json"):
+        indexed_dirs.add(index_file.parent)
         try:
             data = json.loads(index_file.read_text(encoding="utf-8"))
             sessions.extend(data.get("entries", []))
         except (json.JSONDecodeError, OSError):
             pass
+
+    for proj_dir in PROJECTS_DIR.iterdir():
+        if not proj_dir.is_dir() or proj_dir in indexed_dirs:
+            continue
+        for jsonl_file in proj_dir.glob("*.jsonl"):
+            session = parse_jsonl_session(jsonl_file)
+            if session:
+                sessions.append(session)
+
     return sessions
 
 

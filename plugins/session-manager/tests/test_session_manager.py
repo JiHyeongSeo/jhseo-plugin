@@ -291,3 +291,95 @@ class TestFilterOldSessions:
         result = session_manager.filter_old_sessions([s], days=30)
 
         assert result == []
+
+
+class TestParseJsonlSession:
+    def _make_jsonl(self, tmp_path, records: list[dict]) -> Path:
+        f = tmp_path / "abc-123.jsonl"
+        f.write_text("\n".join(json.dumps(r) for r in records))
+        return f
+
+    def test_extracts_project_path_from_cwd(self, tmp_path):
+        jsonl = self._make_jsonl(tmp_path, [
+            {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-01-01T00:00:00.000Z", "sessionId": "abc-123", "cwd": "/home/user/myproject"},
+            {"type": "user", "sessionId": "abc-123", "parentUuid": None, "message": {"role": "user", "content": [{"type": "text", "text": "Hello"}]}},
+        ])
+        result = session_manager.parse_jsonl_session(jsonl)
+        assert result is not None
+        assert result["projectPath"] == "/home/user/myproject"
+
+    def test_extracts_ai_title_as_summary(self, tmp_path):
+        jsonl = self._make_jsonl(tmp_path, [
+            {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-01-01T00:00:00.000Z", "sessionId": "abc-123", "cwd": "/home/user/proj"},
+            {"type": "ai-title", "sessionId": "abc-123", "aiTitle": "Fix the login bug"},
+        ])
+        result = session_manager.parse_jsonl_session(jsonl)
+        assert result is not None
+        assert result["summary"] == "Fix the login bug"
+
+    def test_falls_back_to_first_prompt_when_no_ai_title(self, tmp_path):
+        jsonl = self._make_jsonl(tmp_path, [
+            {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-01-01T00:00:00.000Z", "sessionId": "abc-123", "cwd": "/home/user/proj"},
+            {"type": "user", "sessionId": "abc-123", "parentUuid": None, "message": {"role": "user", "content": [{"type": "text", "text": "Please help me"}]}},
+        ])
+        result = session_manager.parse_jsonl_session(jsonl)
+        assert result is not None
+        assert "Please help me" in result["summary"]
+
+    def test_counts_user_and_assistant_messages(self, tmp_path):
+        jsonl = self._make_jsonl(tmp_path, [
+            {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-01-01T00:00:00.000Z", "sessionId": "abc-123", "cwd": "/home/user/proj"},
+            {"type": "user", "sessionId": "abc-123", "parentUuid": None, "message": {"role": "user", "content": []}},
+            {"type": "assistant", "sessionId": "abc-123", "message": {}},
+            {"type": "user", "sessionId": "abc-123", "parentUuid": None, "message": {"role": "user", "content": []}},
+        ])
+        result = session_manager.parse_jsonl_session(jsonl)
+        assert result is not None
+        assert result["messageCount"] == 3
+
+    def test_returns_none_if_no_cwd(self, tmp_path):
+        jsonl = self._make_jsonl(tmp_path, [
+            {"type": "queue-operation", "operation": "enqueue", "sessionId": "abc-123"},
+        ])
+        result = session_manager.parse_jsonl_session(jsonl)
+        assert result is None
+
+    def test_session_id_from_filename(self, tmp_path):
+        jsonl = self._make_jsonl(tmp_path, [
+            {"type": "queue-operation", "operation": "enqueue", "cwd": "/home/user/proj"},
+        ])
+        result = session_manager.parse_jsonl_session(jsonl)
+        assert result is not None
+        assert result["sessionId"] == "abc-123"
+
+
+class TestLoadAllSessionsWithJsonl:
+    def test_loads_from_jsonl_when_no_index(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "PROJECTS_DIR", tmp_path)
+        proj = tmp_path / "proj-no-index"
+        proj.mkdir()
+        records = [
+            {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-01-01T00:00:00.000Z", "sessionId": "sess-1", "cwd": "/home/user/proj"},
+            {"type": "user", "sessionId": "sess-1", "parentUuid": None, "message": {"role": "user", "content": [{"type": "text", "text": "Hi"}]}},
+        ]
+        (proj / "sess-1.jsonl").write_text("\n".join(json.dumps(r) for r in records))
+
+        result = session_manager.load_all_sessions()
+
+        assert len(result) == 1
+        assert result[0]["sessionId"] == "sess-1"
+        assert result[0]["projectPath"] == "/home/user/proj"
+
+    def test_does_not_double_load_indexed_projects(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "PROJECTS_DIR", tmp_path)
+        proj = tmp_path / "proj-with-index"
+        proj.mkdir()
+        entries = [make_session("s1")]
+        (proj / "sessions-index.json").write_text(json.dumps({"version": 1, "entries": entries}))
+        # .jsonl도 존재하지만 index가 있으므로 중복 로드 안 함
+        (proj / "s1.jsonl").write_text('{"type":"queue-operation","cwd":"/x"}')
+
+        result = session_manager.load_all_sessions()
+
+        assert len(result) == 1
+        assert result[0]["sessionId"] == "s1"
