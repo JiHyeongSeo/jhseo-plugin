@@ -51,13 +51,17 @@ def parse_jsonl_session(jsonl_path: Path) -> dict | None:
 
         if not first_prompt and rtype == "user":
             content = record.get("message", {}).get("content", [])
+            text = ""
             if isinstance(content, list):
                 for part in content:
                     if isinstance(part, dict) and part.get("type") == "text":
-                        first_prompt = part.get("text", "")[:200]
+                        text = part.get("text", "")
                         break
             elif isinstance(content, str):
-                first_prompt = content[:200]
+                text = content
+            # Claude Code 자동 삽입 시스템 메시지 건너뜀
+            if not text.startswith("Caveat:"):
+                first_prompt = text[:200]
             if record.get("parentUuid") is not None:
                 is_sidechain = True
 
