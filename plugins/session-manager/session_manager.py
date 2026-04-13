@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -139,6 +140,17 @@ def clean_summary(text: str) -> str:
     text = re.sub(r"<[^>]*$", "", text)   # 끝에 잘린 불완전 태그 제거
     text = " ".join(text.split())          # 연속 공백·개행 → 단일 공백
     return text.strip()
+
+
+def _tty_input(prompt: str) -> str:
+    """fzf execute() 환경에서도 작동하는 인터랙티브 입력. /dev/tty를 직접 사용."""
+    try:
+        with open("/dev/tty", "r") as tty:
+            sys.stderr.write(prompt)
+            sys.stderr.flush()
+            return tty.readline().rstrip("\n")
+    except OSError:
+        return input(prompt)
 
 
 def load_title_overrides() -> dict[str, str]:
@@ -617,24 +629,18 @@ def main() -> None:
         summary = get_display_summary(target)
 
         if fzf_action_name == "delete":
-            try:
-                confirm = input(f"\n  삭제: '{summary[:40]}' (y/N) ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                return
+            confirm = _tty_input(f"\n  삭제: '{summary[:40]}' (y/N) ").strip().lower()
             if confirm == "y":
                 delete_session(target)
-                print("  삭제 완료.")
+                sys.stderr.write("  삭제 완료.\n")
+                sys.stderr.flush()
 
         elif fzf_action_name == "edit-title":
-            try:
-                new_title = input(f"\n  새 제목 (현재: {summary[:40]}): ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                return
+            new_title = _tty_input(f"\n  새 제목 (현재: {summary[:40]}): ").strip()
             if new_title:
                 save_title_override(fzf_session_id, new_title)
-                print(f"  저장됨: {new_title}")
+                sys.stderr.write(f"  저장됨: {new_title}\n")
+                sys.stderr.flush()
         return
 
     sessions = load_all_sessions()
