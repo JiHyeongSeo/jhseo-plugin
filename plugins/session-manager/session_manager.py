@@ -229,10 +229,9 @@ def get_search_content(session: dict) -> str:
 def format_session_line(session: dict) -> str:
     """세션을 fzf 입력용 한 줄 문자열로 변환.
 
-    포맷: {session_id}\\t{display}\\t{search_content}
-    - fzf --with-nth=2 로 display만 표시
-    - fzf --nth=2,3 으로 display + 대화내용 검색 (UUID 제외)
-    - {1} 으로 session_id 추출
+    포맷: {display}<ESC>[8m{search_content}<ESC>[0m  {session_id}
+    - ANSI conceal(ESC[8m)로 대화내용을 숨기되 fzf --ansi로 검색 가능하게 유지
+    - session_id는 맨 끝 단어 -> fzf {-1}로 추출
     """
     date = session.get("modified", "")[:10]
     project = session.get("projectPath", "?").split("/")[-1]
@@ -242,7 +241,9 @@ def format_session_line(session: dict) -> str:
     session_id = session.get("sessionId", "")
     display = f"{date}  {project:<20}  {summary:<60}  [{branch}] {msgs}msgs"
     search_content = get_search_content(session)
-    return f"{session_id}\t{display}\t{search_content}"
+    # ESC[8m = conceal (visually hidden but searchable by fzf --ansi)
+    hidden = f"\x1b[8m {search_content}\x1b[0m" if search_content else ""
+    return f"{display}{hidden}  {session_id}"
 
 
 def format_claude_output(sessions: list[dict], filter_str: str = "") -> str:
@@ -481,23 +482,22 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--border",
                 "--prompt=세션 검색> ",
                 "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  →/←:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
-                # 탭 구분자: {1}=session_id, {2}=display, {3}=대화내용(검색용)
-                "--delimiter=\t",
-                "--with-nth=2",   # display 필드만 표시, 검색은 전체 필드(원본) 대상
-                f"--preview=python3 {script_path} --preview-id {{1}} --sessions-cache {cache_file}",
+                # session_id는 맨 끝 단어 → {-1}로 추출
+                # ANSI conceal 텍스트에 대화내용 숨겨서 제목+내용 동시 검색 가능
+                f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file}",
                 "--preview-window=right:50%:wrap",
-                # Enter: session_id({1})를 파일에 기록 후 fzf 종료
-                f"--bind=enter:execute(printf 'resume:%s' {{1}} > {action_file} 2>/dev/null)+abort",
+                # Enter: session_id({-1})를 파일에 기록 후 fzf 종료
+                f"--bind=enter:execute(printf 'resume:%s' {{-1}} > {action_file} 2>/dev/null)+abort",
                 # Ctrl-D: 삭제 (인터랙티브 확인) + 목록 갱신
                 (
                     f"--bind=ctrl-d:execute(python3 {script_path}"
-                    f" --fzf-action delete {{1}} --sessions-cache {cache_file})"
+                    f" --fzf-action delete {{-1}} --sessions-cache {cache_file})"
                     f"+reload(python3 {script_path} --fzf-list-lines)"
                 ),
                 # Ctrl-T: 제목 편집 (인터랙티브) + 목록 갱신
                 (
                     f"--bind=ctrl-t:execute(python3 {script_path}"
-                    f" --fzf-action edit-title {{1}} --sessions-cache {cache_file})"
+                    f" --fzf-action edit-title {{-1}} --sessions-cache {cache_file})"
                     f"+reload(python3 {script_path} --fzf-list-lines)"
                 ),
                 # Ctrl-P: 미리보기 패널 토글
