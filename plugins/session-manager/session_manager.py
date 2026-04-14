@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.7"
+VERSION = "1.4.8"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -517,12 +517,12 @@ def install_cli() -> None:
     _check_and_install_deps()
 
 
-def format_session_preview(session: dict) -> str:
+def format_session_preview(session: dict, highlight: str = "") -> str:
     """세션 대화 내용을 fzf 미리보기용으로 포맷.
 
-    $FZF_QUERY 환경변수가 설정된 경우 검색어를 노란색으로 강조.
+    highlight가 설정된 경우 검색어를 노란색으로 강조.
     """
-    query = os.environ.get("FZF_QUERY", "").strip()
+    query = highlight.strip()
 
     full_path = Path(session.get("fullPath", ""))
     header = [
@@ -608,9 +608,8 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 # 목록 하이라이트 색상: 노란색
                 "--color=hl:#ffaf00,hl+:#ffaf00",
                 # session_id는 맨 끝 단어 → {-1}로 추출
-                # ANSI conceal 텍스트에 대화내용 숨겨서 제목+내용 동시 검색 가능
-                # $FZF_QUERY 환경변수로 검색어 전달 → 미리보기에서 하이라이트
-                f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file}",
+                # {q}로 현재 검색어를 preview에 명시적으로 전달 → 하이라이트 적용
+                f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file} --highlight {{q}}",
                 "--preview-window=right:50%:wrap",
                 # 검색어 바뀔 때마다 미리보기 갱신 (하이라이트 반영)
                 "--bind=change:refresh-preview",
@@ -765,6 +764,10 @@ def main() -> None:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--highlight", nargs="*", default=[],
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/claude-sessions 심링크 설치"
     )
@@ -784,7 +787,8 @@ def main() -> None:
             sessions = load_all_sessions()
         session = next((s for s in sessions if s.get("sessionId") == args.preview_id), None)
         if session:
-            print(format_session_preview(session))
+            highlight = " ".join(args.highlight) if args.highlight else ""
+            print(format_session_preview(session, highlight=highlight))
         else:
             print(f"세션을 찾을 수 없습니다: {args.preview_id}")
         return
