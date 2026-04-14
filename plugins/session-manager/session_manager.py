@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.6"
+VERSION = "1.4.7"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -273,8 +273,9 @@ def format_session_line(session: dict) -> str:
     session_id = session.get("sessionId", "")
     display = f"{date}  {project:<20}  {summary:<60}  [{branch}] {msgs}msgs"
     search_content = get_search_content(session)
-    # ESC[8m = conceal (visually hidden but searchable by fzf --ansi)
-    hidden = f"\x1b[8m {search_content}\x1b[0m" if search_content else ""
+    # ESC[90m = dark gray (nearly invisible on dark terminals, searchable in fzf interactive mode)
+    # ESC[8m (conceal) skips text in fzf's interactive matching pipeline
+    hidden = f"\x1b[90m {search_content}\x1b[0m" if search_content else ""
     return f"{display}{hidden}  {session_id}"
 
 
