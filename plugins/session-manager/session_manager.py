@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.5"
+VERSION = "1.4.6"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -598,6 +598,7 @@ def run_fzf(sessions: list[dict]) -> dict | None:
             [
                 "fzf",
                 "--ansi",
+                "--exact",            # 퍼지 대신 정확한 부분문자열 매칭 (한글·영어 노이즈 방지)
                 "--height=90%",
                 "--layout=reverse",
                 "--border",
