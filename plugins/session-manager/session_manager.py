@@ -187,26 +187,34 @@ def get_display_summary(session: dict) -> str:
 
 
 def get_search_content(session: dict) -> str:
-    """fzf 검색용 대화 내용 추출. jsonl 앞부분 30KB만 읽어 빠르게 처리."""
+    """fzf 검색용 대화 내용 추출.
+
+    - firstPrompt(이미 추출된 첫 메시지) 우선 사용
+    - jsonl에서 user 메시지만 추가 (assistant 제외: 코드·마크다운이 노이즈 유발)
+    - 최대 5개 user 메시지, 400자 제한
+    """
+    first_prompt = clean_summary(session.get("firstPrompt", ""))
+
     full_path = Path(session.get("fullPath", ""))
     if not full_path.exists():
-        return ""
+        return first_prompt[:300]
     try:
         with open(full_path, encoding="utf-8", errors="replace") as f:
-            raw = f.read(30720)
+            raw = f.read(20480)
     except OSError:
-        return ""
+        return first_prompt[:300]
 
     texts = []
     char_count = 0
+    user_count = 0
     for line in raw.splitlines():
-        if char_count >= 600:
+        if char_count >= 400 or user_count >= 5:
             break
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if record.get("type") not in ("user", "assistant"):
+        if record.get("type") != "user":  # user 메시지만 (assistant 제외)
             continue
         content = record.get("message", {}).get("content", [])
         text = ""
@@ -220,10 +228,14 @@ def get_search_content(session: dict) -> str:
         text = clean_summary(text)
         if not text or "Caveat:" in text[:50]:
             continue
-        texts.append(text[:120])
+        texts.append(text[:100])
         char_count += len(texts[-1])
+        user_count += 1
 
-    return " ".join(texts)
+    extra = " ".join(texts)
+    if first_prompt:
+        return f"{first_prompt[:150]} {extra}".strip()
+    return extra
 
 
 def format_session_line(session: dict) -> str:
