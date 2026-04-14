@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.8"
+VERSION = "1.4.9"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -585,6 +585,7 @@ def run_fzf(sessions: list[dict]) -> dict | None:
 
     cache_file = None
     action_file = None
+    query_file = None
     try:
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".json", delete=False, encoding="utf-8"
@@ -594,6 +595,11 @@ def run_fzf(sessions: list[dict]) -> dict | None:
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as af:
             action_file = af.name
+
+        # 검색어를 파일로 전달 (fzf {q}가 preview subprocess 환경변수로 전달 안 되는 문제 우회)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as qf:
+            qf.write("")
+            query_file = qf.name
 
         subprocess.run(
             [
@@ -608,11 +614,11 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 # 목록 하이라이트 색상: 노란색
                 "--color=hl:#ffaf00,hl+:#ffaf00",
                 # session_id는 맨 끝 단어 → {-1}로 추출
-                # {q}로 현재 검색어를 preview에 명시적으로 전달 → 하이라이트 적용
-                f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file} --highlight {{q}}",
+                # 검색어는 query_file을 통해 전달 (fzf preview에서 {q} env var 전달 불안정 문제 우회)
+                f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file} --query-file {query_file}",
                 "--preview-window=right:50%:wrap",
-                # 검색어 바뀔 때마다 미리보기 갱신 (하이라이트 반영)
-                "--bind=change:refresh-preview",
+                # 검색어가 바뀔 때마다: 1) 파일에 저장 2) 미리보기 갱신
+                f"--bind=change:execute-silent(printf '%s' {{q}} > {query_file})+refresh-preview",
                 # Enter: session_id({-1})를 파일에 기록 후 fzf 종료
                 f"--bind=enter:execute(printf 'resume:%s' {{-1}} > {action_file} 2>/dev/null)+abort",
                 # Ctrl-D: 삭제 (인터랙티브 확인) + 목록 갱신
@@ -653,6 +659,8 @@ def run_fzf(sessions: list[dict]) -> dict | None:
             Path(cache_file).unlink(missing_ok=True)
         if action_file:
             Path(action_file).unlink(missing_ok=True)
+        if query_file:
+            Path(query_file).unlink(missing_ok=True)
 
 
 def show_action_menu(session: dict) -> None:
@@ -768,6 +776,10 @@ def main() -> None:
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
+        "--query-file", metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/claude-sessions 심링크 설치"
     )
@@ -787,7 +799,15 @@ def main() -> None:
             sessions = load_all_sessions()
         session = next((s for s in sessions if s.get("sessionId") == args.preview_id), None)
         if session:
-            highlight = " ".join(args.highlight) if args.highlight else ""
+            # query_file 우선, 없으면 --highlight 인자 사용
+            highlight = ""
+            if args.query_file:
+                try:
+                    highlight = Path(args.query_file).read_text(encoding="utf-8").strip()
+                except OSError:
+                    pass
+            if not highlight and args.highlight:
+                highlight = " ".join(args.highlight)
             print(format_session_preview(session, highlight=highlight))
         else:
             print(f"세션을 찾을 수 없습니다: {args.preview_id}")
