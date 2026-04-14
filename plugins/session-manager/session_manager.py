@@ -483,8 +483,7 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  →/←:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
                 # 탭 구분자: {1}=session_id, {2}=display, {3}=대화내용(검색용)
                 "--delimiter=\t",
-                "--with-nth=2",   # display 필드만 표시
-                "--nth=2,3",      # display + 대화내용만 검색 (UUID 제외)
+                "--with-nth=2",   # display 필드만 표시, 검색은 전체 필드(원본) 대상
                 f"--preview=python3 {script_path} --preview-id {{1}} --sessions-cache {cache_file}",
                 "--preview-window=right:50%:wrap",
                 # Enter: session_id({1})를 파일에 기록 후 fzf 종료
