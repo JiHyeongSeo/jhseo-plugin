@@ -380,6 +380,85 @@ def print_tree(sessions: list[dict]) -> None:
                 print(f"  {prefix} {date}  {summary}  [{branch}]  {msgs}msgs")
 
 
+def _try_install_fzf() -> bool:
+    """fzf 설치 시도. 성공 시 True."""
+    import platform
+
+    system = platform.system()
+    if system == "Linux":
+        if shutil.which("apt"):
+            print("  → apt로 설치 중 (sudo 비밀번호 필요할 수 있음)...")
+            result = subprocess.run(["sudo", "apt", "install", "-y", "fzf"])
+            if result.returncode == 0 and shutil.which("fzf"):
+                print("  ✓ fzf 설치 완료")
+                return True
+        if shutil.which("snap"):
+            print("  → snap으로 설치 중...")
+            result = subprocess.run(["sudo", "snap", "install", "fzf"])
+            if result.returncode == 0 and shutil.which("fzf"):
+                print("  ✓ fzf 설치 완료")
+                return True
+    elif system == "Darwin":
+        if shutil.which("brew"):
+            print("  → brew로 설치 중...")
+            result = subprocess.run(["brew", "install", "fzf"])
+            if result.returncode == 0 and shutil.which("fzf"):
+                print("  ✓ fzf 설치 완료")
+                return True
+
+    print("  ✗ 자동 설치 실패. 수동으로 설치하세요:")
+    print("    Ubuntu/Debian : sudo apt install fzf")
+    print("    macOS         : brew install fzf")
+    print("    기타          : https://github.com/junegunn/fzf#installation")
+    return False
+
+
+def _try_install_rich() -> bool:
+    """rich 설치 시도. 성공 시 True."""
+    for pip_cmd in ("pip3", "pip"):
+        if not shutil.which(pip_cmd):
+            continue
+        print(f"  → {pip_cmd}로 설치 중...")
+        result = subprocess.run([pip_cmd, "install", "rich"])
+        if result.returncode == 0:
+            print("  ✓ rich 설치 완료")
+            return True
+    # pip 없으면 python -m pip 시도
+    result = subprocess.run([sys.executable, "-m", "pip", "install", "rich"])
+    if result.returncode == 0:
+        print("  ✓ rich 설치 완료")
+        return True
+    print("  ✗ 자동 설치 실패. 수동으로 설치하세요: pip install rich")
+    return False
+
+
+def _check_and_install_deps() -> None:
+    """필요한 외부 의존성 확인 및 설치."""
+    print("\n[의존성 확인]")
+
+    # fzf (필수: 인터랙티브 모드)
+    if shutil.which("fzf"):
+        fzf_ver = ""
+        try:
+            out = subprocess.run(["fzf", "--version"], capture_output=True, text=True)
+            fzf_ver = out.stdout.strip().split()[0] if out.stdout else ""
+        except OSError:
+            pass
+        print(f"  ✓ fzf {fzf_ver} (인터랙티브 세션 브라우저)")
+    else:
+        print("  ✗ fzf 없음 (필수: 인터랙티브 세션 브라우저)")
+        _try_install_fzf()
+
+    # rich (선택: 트리 뷰 개선)
+    try:
+        import importlib
+        importlib.import_module("rich")
+        print("  ✓ rich (트리 뷰 개선)")
+    except ImportError:
+        print("  ✗ rich 없음 (선택: --list 트리 뷰 개선)")
+        _try_install_rich()
+
+
 def install_cli() -> None:
     """session_manager.py를 ~/.local/bin/claude-sessions 심링크로 설치."""
     script_path = Path(__file__).resolve()
@@ -392,15 +471,17 @@ def install_cli() -> None:
     link_path.symlink_to(script_path)
     os.chmod(link_path, 0o755)
 
-    path_dirs = os.environ.get("PATH", "").split(":")
-    in_path = str(bin_dir) in path_dirs
-
-    print(f"설치 완료: {link_path}")
+    print(f"\n[설치 완료]")
+    print(f"  {link_path}")
     print(f"  -> {script_path}")
-    if not in_path:
-        print(f"\n주의: {bin_dir} 이 PATH에 없습니다.")
-        print("다음을 ~/.bashrc 또는 ~/.zshrc에 추가하세요:")
-        print(f'  export PATH="$HOME/.local/bin:$PATH"')
+
+    path_dirs = os.environ.get("PATH", "").split(":")
+    if str(bin_dir) not in path_dirs:
+        print(f"\n  주의: {bin_dir} 이 PATH에 없습니다.")
+        print("  다음을 ~/.bashrc 또는 ~/.zshrc에 추가하세요:")
+        print(f'    export PATH="$HOME/.local/bin:$PATH"')
+
+    _check_and_install_deps()
 
 
 def format_session_preview(session: dict) -> str:
