@@ -10,6 +10,8 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+VERSION = "1.4.5"
+
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
 
@@ -141,6 +143,21 @@ def group_by_project(sessions: list[dict]) -> dict[str, list[dict]]:
     return dict(sorted(groups.items()))
 
 
+def _highlight_text(text: str, query: str) -> str:
+    """검색어와 일치하는 텍스트를 ANSI 노란색 굵게 강조. 대소문자 무시."""
+    if not query:
+        return text
+    for term in query.split():
+        if not term:
+            continue
+        try:
+            pattern = re.compile(re.escape(term), re.IGNORECASE)
+            text = pattern.sub(lambda m: f"\x1b[1;33m{m.group(0)}\x1b[0m", text)
+        except re.error:
+            pass
+    return text
+
+
 def clean_summary(text: str) -> str:
     """XML 태그, 개행 등 불필요한 문자 제거."""
     text = re.sub(r"<[^>]+>", " ", text)  # 완전한 XML 태그 → 공백
@@ -206,15 +223,15 @@ def get_search_content(session: dict) -> str:
 
     texts = []
     char_count = 0
-    user_count = 0
+    msg_count = 0
     for line in raw.splitlines():
-        if char_count >= 400 or user_count >= 5:
+        if char_count >= 500 or msg_count >= 8:
             break
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if record.get("type") != "user":  # user 메시지만 (assistant 제외)
+        if record.get("type") not in ("user", "assistant"):
             continue
         content = record.get("message", {}).get("content", [])
         text = ""
@@ -228,9 +245,12 @@ def get_search_content(session: dict) -> str:
         text = clean_summary(text)
         if not text or "Caveat:" in text[:50]:
             continue
+        # 코드블록이 많은 메시지는 노이즈 → 건너뜀
+        if text.count("```") >= 2 or text.count("def ") + text.count("class ") >= 3:
+            continue
         texts.append(text[:100])
         char_count += len(texts[-1])
-        user_count += 1
+        msg_count += 1
 
     extra = " ".join(texts)
     if first_prompt:
@@ -497,7 +517,12 @@ def install_cli() -> None:
 
 
 def format_session_preview(session: dict) -> str:
-    """세션 대화 내용을 fzf 미리보기용으로 포맷."""
+    """세션 대화 내용을 fzf 미리보기용으로 포맷.
+
+    $FZF_QUERY 환경변수가 설정된 경우 검색어를 노란색으로 강조.
+    """
+    query = os.environ.get("FZF_QUERY", "").strip()
+
     full_path = Path(session.get("fullPath", ""))
     header = [
         f"프로젝트: {session.get('projectPath', '')}",
@@ -505,12 +530,13 @@ def format_session_preview(session: dict) -> str:
         f"제목:     {get_display_summary(session)}",
         "─" * 60,
     ]
+    if query:
+        header = [_highlight_text(line, query) for line in header]
 
     if not full_path.exists():
         return "\n".join(header + ["[세션 파일 없음]"])
 
     messages = []
-    msg_count = 0
     try:
         for line in full_path.read_text(encoding="utf-8", errors="replace").splitlines():
             try:
@@ -533,12 +559,14 @@ def format_session_preview(session: dict) -> str:
                 text = content
 
             text = clean_summary(text)
-            if not text:
+            if not text or "Caveat:" in text[:50]:
                 continue
 
             prefix = "👤" if rtype == "user" else "🤖"
-            messages.append(f"\n{prefix} {text[:250]}")
-            msg_count += 1
+            msg_text = text[:250]
+            if query:
+                msg_text = _highlight_text(msg_text, query)
+            messages.append(f"\n{prefix} {msg_text}")
 
     except OSError:
         messages.append("[파일 읽기 오류]")
@@ -575,10 +603,15 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--border",
                 "--prompt=세션 검색> ",
                 "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  →/←:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
+                # 목록 하이라이트 색상: 노란색
+                "--color=hl:#ffaf00,hl+:#ffaf00",
                 # session_id는 맨 끝 단어 → {-1}로 추출
                 # ANSI conceal 텍스트에 대화내용 숨겨서 제목+내용 동시 검색 가능
+                # $FZF_QUERY 환경변수로 검색어 전달 → 미리보기에서 하이라이트
                 f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file}",
                 "--preview-window=right:50%:wrap",
+                # 검색어 바뀔 때마다 미리보기 갱신 (하이라이트 반영)
+                "--bind=change:refresh-preview",
                 # Enter: session_id({-1})를 파일에 기록 후 fzf 종료
                 f"--bind=enter:execute(printf 'resume:%s' {{-1}} > {action_file} 2>/dev/null)+abort",
                 # Ctrl-D: 삭제 (인터랙티브 확인) + 목록 갱신
@@ -695,6 +728,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="claude-sessions",
         description="Claude Code 세션 브라우저",
+    )
+    parser.add_argument(
+        "--version", "-v", action="version", version=f"%(prog)s {VERSION}",
     )
     parser.add_argument(
         "--list", action="store_true",
