@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.13"
+VERSION = "1.4.14"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -539,7 +539,7 @@ def format_session_preview(session: dict, highlight: str = "") -> str:
 
     matched_msgs = []   # 검색어 포함 메시지
     other_msgs = []     # 나머지 메시지
-    MAX_MSGS = 20       # 전체 메시지 수 제한
+    MAX_MSGS = 50       # 전체 메시지 수 제한
 
     # 스킬 주입 메시지 필터 패턴
     SKILL_PATTERNS = (
@@ -605,7 +605,7 @@ def format_session_preview(session: dict, highlight: str = "") -> str:
         sep = [f"\n\x1b[1;33m── 검색어 '{query}' 포함 메시지 ({len(matched_msgs)}개) ──\x1b[0m"]
         messages = sep + matched_msgs
         if other_msgs:
-            messages += ["\n\x1b[90m── 나머지 메시지 ──\x1b[0m"] + other_msgs[:5]
+            messages += ["\n\x1b[90m── 나머지 메시지 ──\x1b[0m"] + other_msgs[:20]
     else:
         messages = other_msgs
 
@@ -647,7 +647,7 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--layout=reverse",
                 "--border",
                 "--prompt=세션 검색> ",
-                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  Alt+J/K:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
+                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  Shift+↓↑:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
                 # 목록 하이라이트 색상: 노란색
                 "--color=hl:#ffaf00,hl+:#ffaf00",
                 # session_id는 맨 끝 단어 → {-1}로 추출
@@ -672,9 +672,9 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 ),
                 # Ctrl-P: 미리보기 패널 토글
                 "--bind=ctrl-p:toggle-preview",
-                # Alt+J/K: 미리보기 패널 스크롤 (WSL2/Windows Terminal에서 shift-up/down 시퀀스 전달 불안정)
-                "--bind=alt-j:preview-down",
-                "--bind=alt-k:preview-up",
+                # Shift+↓↑: 미리보기 패널 스크롤 (fzf 기본값과 동일, ↑↓는 리스트 탐색)
+                "--bind=shift-down:preview-down",
+                "--bind=shift-up:preview-up",
             ],
             input="\n".join(lines),
             text=True,
