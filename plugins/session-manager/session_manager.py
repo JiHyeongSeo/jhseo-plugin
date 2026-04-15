@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.9"
+VERSION = "1.4.10"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -520,9 +520,12 @@ def install_cli() -> None:
 def format_session_preview(session: dict, highlight: str = "") -> str:
     """세션 대화 내용을 fzf 미리보기용으로 포맷.
 
-    highlight가 설정된 경우 검색어를 노란색으로 강조.
+    highlight가 설정된 경우:
+    - 검색어 포함 메시지를 맨 위에 표시 (스크롤 없이 바로 확인 가능)
+    - 검색어를 노란색으로 강조
     """
     query = highlight.strip()
+    query_terms = [t for t in query.split() if t] if query else []
 
     full_path = Path(session.get("fullPath", ""))
     header = [
@@ -537,9 +540,23 @@ def format_session_preview(session: dict, highlight: str = "") -> str:
     if not full_path.exists():
         return "\n".join(header + ["[세션 파일 없음]"])
 
-    messages = []
+    matched_msgs = []   # 검색어 포함 메시지
+    other_msgs = []     # 나머지 메시지
+    MAX_MSGS = 20       # 전체 메시지 수 제한
+
+    # 스킬 주입 메시지 필터 패턴
+    SKILL_PATTERNS = (
+        "Base directory for this skill:",
+        "REQUIRED SUB-SKILL:",
+        "subagent_type",
+        "## Overview\nRandom fixes",
+    )
+
     try:
-        for line in full_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        raw = full_path.read_text(encoding="utf-8", errors="replace")
+        for line in raw.splitlines():
+            if len(matched_msgs) + len(other_msgs) >= MAX_MSGS:
+                break
             try:
                 record = json.loads(line)
             except json.JSONDecodeError:
@@ -563,14 +580,37 @@ def format_session_preview(session: dict, highlight: str = "") -> str:
             if not text or "Caveat:" in text[:50]:
                 continue
 
+            # 스킬 주입 메시지 필터
+            if any(pat in text for pat in SKILL_PATTERNS):
+                continue
+
             prefix = "👤" if rtype == "user" else "🤖"
-            msg_text = text[:250]
-            if query:
-                msg_text = _highlight_text(msg_text, query)
-            messages.append(f"\n{prefix} {msg_text}")
+            msg_text = text[:300]
+
+            # 검색어가 있으면 해당 메시지 분류 + 하이라이트
+            if query_terms:
+                text_lower = msg_text.lower()
+                has_match = any(t.lower() in text_lower for t in query_terms)
+                highlighted = _highlight_text(msg_text, query)
+                entry = f"\n{prefix} {highlighted}"
+                if has_match:
+                    matched_msgs.append(entry)
+                else:
+                    other_msgs.append(entry)
+            else:
+                other_msgs.append(f"\n{prefix} {msg_text}")
 
     except OSError:
-        messages.append("[파일 읽기 오류]")
+        other_msgs.append("[파일 읽기 오류]")
+
+    # 검색 결과: 매칭 메시지 먼저, 구분선, 나머지
+    if query_terms and matched_msgs:
+        sep = [f"\n\x1b[1;33m── 검색어 '{query}' 포함 메시지 ({len(matched_msgs)}개) ──\x1b[0m"]
+        messages = sep + matched_msgs
+        if other_msgs:
+            messages += ["\n\x1b[90m── 나머지 메시지 ──\x1b[0m"] + other_msgs[:5]
+    else:
+        messages = other_msgs
 
     return "\n".join(header + messages)
 
