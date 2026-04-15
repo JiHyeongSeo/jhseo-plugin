@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.16"
+VERSION = "1.4.17"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -607,6 +607,8 @@ def run_fzf(sessions: list[dict]) -> dict | None:
     """fzf로 세션 선택 후 resume할 세션 반환. 취소하면 None."""
     import tempfile
 
+    # 기본 정렬: 날짜순(최신 먼저)
+    sessions = sorted(sessions, key=lambda s: s.get("modified", ""), reverse=True)
     lines = [format_session_line(s) for s in sessions]
     id_map = {s["sessionId"]: s for s in sessions}
     script_path = Path(__file__).resolve()
@@ -638,7 +640,7 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--layout=reverse",
                 "--border",
                 "--prompt=세션 검색> ",
-                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  Shift+↓↑:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
+                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  Ctrl-P:미리보기토글  Ctrl-C:닫기\nShift+↓↑:미리보기스크롤  Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬",
                 # 목록 하이라이트 색상: 노란색
                 "--color=hl:#ffaf00,hl+:#ffaf00",
                 # session_id는 맨 끝 단어 → {-1}로 추출
@@ -663,9 +665,12 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 ),
                 # Ctrl-P: 미리보기 패널 토글
                 "--bind=ctrl-p:toggle-preview",
-                # Shift+↓↑: 미리보기 패널 스크롤 (fzf 기본값과 동일, ↑↓는 리스트 탐색)
+                # Shift+↓↑: 미리보기 패널 스크롤
                 "--bind=shift-down:preview-down",
                 "--bind=shift-up:preview-up",
+                # Ctrl-R: 날짜순 재정렬 / Ctrl-O: 프로젝트순 재정렬
+                f"--bind=ctrl-r:reload(python3 {script_path} --fzf-list-lines --sort date)",
+                f"--bind=ctrl-o:reload(python3 {script_path} --fzf-list-lines --sort project)",
             ],
             input="\n".join(lines),
             text=True,
@@ -795,6 +800,7 @@ def main() -> None:
     )
     parser.add_argument("--sessions-cache", metavar="PATH", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-list-lines", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--sort", choices=["date", "project"], default="date", help=argparse.SUPPRESS)
     parser.add_argument(
         "--fzf-action", nargs="+", metavar=("ACTION", "SESSION_ID"),
         help=argparse.SUPPRESS,
@@ -843,7 +849,12 @@ def main() -> None:
 
     # fzf reload용: 최신 세션 목록 한 줄씩 출력
     if args.fzf_list_lines:
-        for s in load_all_sessions():
+        sessions = load_all_sessions()
+        if args.sort == "project":
+            sessions.sort(key=lambda s: (s.get("projectPath", ""), s.get("modified", "")))
+        else:
+            sessions.sort(key=lambda s: s.get("modified", ""), reverse=True)
+        for s in sessions:
             print(format_session_line(s))
         return
 
