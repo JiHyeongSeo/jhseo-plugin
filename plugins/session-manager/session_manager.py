@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.11"
+VERSION = "1.4.12"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -647,7 +647,7 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--layout=reverse",
                 "--border",
                 "--prompt=세션 검색> ",
-                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  →/←:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
+                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  Shift+↑↓:미리보기스크롤  Ctrl-P:토글  Ctrl-C:닫기",
                 # 목록 하이라이트 색상: 노란색
                 "--color=hl:#ffaf00,hl+:#ffaf00",
                 # session_id는 맨 끝 단어 → {-1}로 추출
@@ -672,9 +672,9 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 ),
                 # Ctrl-P: 미리보기 패널 토글
                 "--bind=ctrl-p:toggle-preview",
-                # →/←: 미리보기 패널 스크롤 (↑↓는 리스트 탐색 유지)
-                "--bind=right:preview-down",
-                "--bind=left:preview-up",
+                # Shift+↑/↓: 미리보기 패널 스크롤 (↑↓는 리스트 탐색 유지, right/left는 입력창 커서 이동과 충돌)
+                "--bind=shift-up:preview-up",
+                "--bind=shift-down:preview-down",
             ],
             input="\n".join(lines),
             text=True,
