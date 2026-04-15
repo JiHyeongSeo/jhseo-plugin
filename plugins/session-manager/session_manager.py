@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.10"
+VERSION = "1.4.11"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -244,9 +244,6 @@ def get_search_content(session: dict) -> str:
             text = content
         text = clean_summary(text)
         if not text or "Caveat:" in text[:50]:
-            continue
-        # 코드블록이 많은 메시지는 노이즈 → 건너뜀
-        if text.count("```") >= 2 or text.count("def ") + text.count("class ") >= 3:
             continue
         texts.append(text[:100])
         char_count += len(texts[-1])
