@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.17"
+VERSION = "1.4.18"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -170,7 +170,11 @@ def _tty_input(prompt: str) -> str:
     """fzf execute() 환경에서도 작동하는 인터랙티브 입력. /dev/tty를 직접 사용."""
     try:
         with open("/dev/tty", "r") as tty:
-            sys.stderr.write(prompt)
+            # fzf --height 모드(인라인 렌더링)에서는 alternate screen이 없어
+            # execute() subprocess가 fzf UI와 동일한 터미널 버퍼를 공유함.
+            # 입력 중 Backspace가 fzf 헤더/메뉴 텍스트를 지우는 문제를 방지하기 위해
+            # 화면을 지우고 커서를 상단으로 이동한 뒤 프롬프트를 표시.
+            sys.stderr.write("\033[2J\033[H" + prompt)
             sys.stderr.flush()
             return tty.readline().rstrip("\n")
     except OSError:
