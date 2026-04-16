@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.4.18"
+VERSION = "1.5.0"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -607,6 +607,221 @@ def format_session_preview(session: dict, highlight: str = "") -> str:
     return "\n".join(header + messages)
 
 
+# ─── tmux 통합 ────────────────────────────────────────────────────────────────
+
+def tmux_open_session(session_id: str, right_pane: str, sessions_cache_path: str) -> None:
+    """선택한 세션을 tmux pane에서 claude --resume으로 실행."""
+    if not right_pane or not session_id:
+        return
+
+    sessions: list[dict] = []
+    if sessions_cache_path:
+        try:
+            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    project_path = session.get("projectPath", "") if session else ""
+
+    cmd = f'cd "{project_path}" && claude --resume {session_id}' if project_path else f"claude --resume {session_id}"
+    subprocess.run(["tmux", "send-keys", "-t", right_pane, cmd, "Enter"])
+
+
+def run_fzf_tmux(
+    preview_file: str,
+    right_pane: str,
+    cache_file: str,
+    query_file: str,
+    right_pane2: str = "",
+) -> None:
+    """tmux 레이아웃용 fzf 세션 브라우저.
+
+    - built-in preview 비활성화 (좌하단 tmux pane이 preview 담당)
+    - Enter  : 우상단 pane에서 세션 열기 (fzf 계속 실행)
+    - Ctrl-J : 우하단 pane에서 세션 열기 (4분할 시 두 번째 창)
+    - focus / change: preview 파일 갱신
+    """
+    sessions = load_all_sessions()
+    sessions = sorted(sessions, key=lambda s: s.get("modified", ""), reverse=True)
+    lines = [format_session_line(s) for s in sessions]
+    script_path = Path(__file__).resolve()
+
+    if cache_file:
+        try:
+            Path(cache_file).write_text(json.dumps(sessions, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+
+    preview_cmd = (
+        f"python3 {script_path} --preview-id {{-1}}"
+        f" --sessions-cache {cache_file}"
+        f" --query-file {query_file}"
+        f" --preview-file {preview_file}"
+        f" 2>/dev/null"
+    )
+
+    # 4분할 여부에 따라 헤더 구성
+    if right_pane2:
+        header = (
+            "Enter:상단세션  Ctrl-J:하단세션  Ctrl-D:삭제  Ctrl-T:제목편집\n"
+            "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-C:닫기"
+        )
+    else:
+        header = (
+            "Enter:세션열기  Ctrl-D:삭제  Ctrl-T:제목편집\n"
+            "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-C:닫기"
+        )
+
+    bindings = [
+        "--ansi", "--exact", "--no-sort", "--layout=reverse", "--border",
+        "--prompt=세션 검색> ",
+        f"--header={header}",
+        "--color=hl:#ffaf00,hl+:#ffaf00",
+        "--no-preview",
+        f"--bind=focus:execute-silent({preview_cmd})",
+        f"--bind=change:execute-silent(printf '%s' {{q}} > {query_file} && {preview_cmd})",
+        # Enter → 우상단 pane
+        (
+            f"--bind=enter:execute-silent("
+            f"python3 {script_path} --tmux-open {{-1}}"
+            f" --right-pane '{right_pane}'"
+            f" --sessions-cache {cache_file}"
+            f" 2>/dev/null)"
+        ),
+        # Ctrl-D: 삭제
+        (
+            f"--bind=ctrl-d:execute(python3 {script_path}"
+            f" --fzf-action delete {{-1}} --sessions-cache {cache_file})"
+            f"+reload(python3 {script_path} --fzf-list-lines)"
+        ),
+        # Ctrl-T: 제목 편집
+        (
+            f"--bind=ctrl-t:execute(python3 {script_path}"
+            f" --fzf-action edit-title {{-1}} --sessions-cache {cache_file})"
+            f"+reload(python3 {script_path} --fzf-list-lines)"
+        ),
+        f"--bind=ctrl-r:reload(python3 {script_path} --fzf-list-lines --sort date)",
+        f"--bind=ctrl-o:reload(python3 {script_path} --fzf-list-lines --sort project)",
+    ]
+
+    # Ctrl-J → 우하단 pane (4분할 시에만)
+    if right_pane2:
+        bindings.append(
+            f"--bind=ctrl-j:execute-silent("
+            f"python3 {script_path} --tmux-open {{-1}}"
+            f" --right-pane '{right_pane2}'"
+            f" --sessions-cache {cache_file}"
+            f" 2>/dev/null)"
+        )
+
+    subprocess.run(["fzf"] + bindings, input="\n".join(lines), text=True)
+
+
+def run_tmux_layout() -> None:
+    """tmux 4분할 레이아웃으로 세션 브라우저 실행.
+
+    레이아웃:
+    ┌─────────────────┬───────────────────┐
+    │  fzf 검색/목록  │  claude 세션 1    │
+    │  (좌상단 40%)   │  (우상단 60%)     │
+    ├─────────────────┼───────────────────┤
+    │  session preview│  claude 세션 2    │
+    │  (좌하단 40%)   │  (우하단 60%)     │
+    └─────────────────┴───────────────────┘
+
+    키 바인딩:
+      Enter   → 우상단 pane에서 세션 열기
+      Ctrl-J  → 우하단 pane에서 세션 열기 (두 세션 동시 비교)
+    """
+    if not shutil.which("tmux"):
+        sys.exit("tmux가 설치되어 있지 않습니다. sudo apt install tmux 로 설치해주세요.")
+
+    tmux_session = "claude-browser"
+    script_path = Path(__file__).resolve()
+
+    # 이미 실행 중인 세션이면 attach
+    if subprocess.run(
+        ["tmux", "has-session", "-t", tmux_session], capture_output=True
+    ).returncode == 0:
+        subprocess.run(["tmux", "attach-session", "-t", tmux_session])
+        return
+
+    # 공유 임시 파일 (고정 경로 — 덮어쓰기 방식)
+    base = "/tmp/claude-browser"
+    preview_file = f"{base}-preview.txt"
+    cache_file = f"{base}-cache.json"
+    query_file = f"{base}-query.txt"
+
+    Path(preview_file).write_text(
+        "← 왼쪽 목록에서 세션을 선택하면\n   미리보기가 여기에 표시됩니다.\n",
+        encoding="utf-8",
+    )
+    Path(cache_file).write_text("[]", encoding="utf-8")
+    Path(query_file).write_text("", encoding="utf-8")
+
+    # tmux 세션 생성 (detached)
+    subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session])
+
+    # ── pane 생성 순서 ──────────────────────────────────────────
+    # 1) 우상단(right1): 전체를 좌우로 분할 (우측 60%)
+    r1 = subprocess.run(
+        ["tmux", "split-window", "-h", "-p", "60",
+         "-t", f"{tmux_session}:0", "-P", "-F", "#{pane_id}"],
+        capture_output=True, text=True,
+    )
+    right1_pane_id = r1.stdout.strip()
+
+    # 2) 좌하단(preview): 좌상단을 위아래로 분할 (하단 35%)
+    subprocess.run(["tmux", "select-pane", "-t", f"{tmux_session}:0.0"])
+    p = subprocess.run(
+        ["tmux", "split-window", "-v", "-p", "35",
+         "-t", f"{tmux_session}:0.0", "-P", "-F", "#{pane_id}"],
+        capture_output=True, text=True,
+    )
+    preview_pane_id = p.stdout.strip()
+
+    # 3) 우하단(right2): 우상단을 위아래로 분할 (하단 50%)
+    r2 = subprocess.run(
+        ["tmux", "split-window", "-v", "-p", "50",
+         "-t", right1_pane_id, "-P", "-F", "#{pane_id}"],
+        capture_output=True, text=True,
+    )
+    right2_pane_id = r2.stdout.strip()
+
+    # ── 각 pane 초기화 ─────────────────────────────────────────
+    init_msg = r"printf '\033[2;37m← Enter: 이 창에서 세션 시작\033[0m\n'"
+    subprocess.run(["tmux", "send-keys", "-t", right1_pane_id, init_msg, "Enter"])
+    subprocess.run(["tmux", "send-keys", "-t", right2_pane_id,
+                    r"printf '\033[2;37m← Ctrl-J: 이 창에서 세션 시작\033[0m\n'", "Enter"])
+
+    # 좌하단: preview 파일 폴링 (watch 우선, 없으면 쉘 루프)
+    watch_cmd = (
+        f"watch -n 0.5 -t -c cat {preview_file} 2>/dev/null"
+        f" || while true; do clear; cat {preview_file} 2>/dev/null; sleep 0.5; done"
+    )
+    subprocess.run(["tmux", "send-keys", "-t", preview_pane_id, watch_cmd, "Enter"])
+
+    # 좌상단: fzf 브라우저 실행 (우상단·우하단 pane ID 전달)
+    browser_cmd = (
+        f"python3 {script_path} --tmux-browser"
+        f" --preview-file {preview_file}"
+        f" --right-pane '{right1_pane_id}'"
+        f" --right-pane2 '{right2_pane_id}'"
+        f" --sessions-cache {cache_file}"
+        f" --query-file {query_file}"
+    )
+    subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0.0", browser_cmd, "Enter"])
+
+    # 포커스를 fzf pane으로
+    subprocess.run(["tmux", "select-pane", "-t", f"{tmux_session}:0.0"])
+
+    # attach (블로킹 — 세션 종료 또는 detach 시 반환)
+    subprocess.run(["tmux", "attach-session", "-t", tmux_session])
+
+
+# ─── 기존 fzf 모드 ─────────────────────────────────────────────────────────────
+
 def run_fzf(sessions: list[dict]) -> dict | None:
     """fzf로 세션 선택 후 resume할 세션 반환. 취소하면 None."""
     import tempfile
@@ -817,6 +1032,16 @@ def main() -> None:
         "--query-file", metavar="PATH",
         help=argparse.SUPPRESS,
     )
+    # tmux 통합
+    parser.add_argument(
+        "--tmux", action="store_true",
+        help="tmux 3분할 레이아웃으로 실행 (검색/preview/claude 세션 동시 표시)"
+    )
+    parser.add_argument("--tmux-browser", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--tmux-open", metavar="SESSION_ID", help=argparse.SUPPRESS)
+    parser.add_argument("--preview-file", metavar="PATH", help=argparse.SUPPRESS)
+    parser.add_argument("--right-pane", metavar="PANE", help=argparse.SUPPRESS)
+    parser.add_argument("--right-pane2", metavar="PANE", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/claude-sessions 심링크 설치"
@@ -824,7 +1049,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # fzf preview 모드: 캐시에서 빠르게 조회 후 출력
+    # fzf preview 모드: 캐시에서 빠르게 조회 후 출력 (또는 파일 저장)
     if args.preview_id:
         if args.sessions_cache:
             try:
@@ -846,9 +1071,33 @@ def main() -> None:
                     pass
             if not highlight and args.highlight:
                 highlight = " ".join(args.highlight)
-            print(format_session_preview(session, highlight=highlight))
+            output = format_session_preview(session, highlight=highlight)
         else:
-            print(f"세션을 찾을 수 없습니다: {args.preview_id}")
+            output = f"세션을 찾을 수 없습니다: {args.preview_id}"
+
+        if args.preview_file:
+            try:
+                Path(args.preview_file).write_text(output, encoding="utf-8")
+            except OSError:
+                pass
+        else:
+            print(output)
+        return
+
+    # tmux-open 모드: 선택한 세션을 지정한 tmux pane에서 실행
+    if args.tmux_open:
+        tmux_open_session(args.tmux_open, args.right_pane or "", args.sessions_cache or "")
+        return
+
+    # tmux-browser 모드: tmux 레이아웃의 fzf pane에서 실행
+    if args.tmux_browser:
+        run_fzf_tmux(
+            preview_file=args.preview_file or "",
+            right_pane=args.right_pane or "",
+            cache_file=args.sessions_cache or "",
+            query_file=args.query_file or "",
+            right_pane2=args.right_pane2 or "",
+        )
         return
 
     # fzf reload용: 최신 세션 목록 한 줄씩 출력
@@ -935,6 +1184,11 @@ def main() -> None:
             for s in old:
                 delete_session(s)
             print(f"{len(old)}개 삭제 완료.")
+        return
+
+    # tmux 3분할 모드
+    if args.tmux:
+        run_tmux_layout()
         return
 
     # 기본: fzf 인터랙티브 모드
