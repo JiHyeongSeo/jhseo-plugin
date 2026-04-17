@@ -95,22 +95,25 @@ def parse_jsonl_session(jsonl_path: Path) -> dict | None:
 def load_all_sessions() -> list[dict]:
     """~/.claude/projects/ 아래 모든 세션을 반환."""
     sessions = []
-    indexed_dirs: set[Path] = set()
+    indexed_ids: set[str] = set()
 
     for index_file in PROJECTS_DIR.glob("*/sessions-index.json"):
         try:
             data = json.loads(index_file.read_text(encoding="utf-8"))
             entries = data.get("entries", [])
-            if entries:
-                indexed_dirs.add(index_file.parent)
-                sessions.extend(entries)
+            for entry in entries:
+                sessions.append(entry)
+                indexed_ids.add(entry.get("sessionId", ""))
         except (json.JSONDecodeError, OSError):
             pass
 
+    # 인덱스에 없는 .jsonl도 직접 파싱 (새 세션이 인덱스에 반영되기 전에도 표시)
     for proj_dir in PROJECTS_DIR.iterdir():
-        if not proj_dir.is_dir() or proj_dir in indexed_dirs:
+        if not proj_dir.is_dir():
             continue
         for jsonl_file in proj_dir.glob("*.jsonl"):
+            if jsonl_file.stem in indexed_ids:
+                continue
             session = parse_jsonl_session(jsonl_file)
             if session:
                 sessions.append(session)
