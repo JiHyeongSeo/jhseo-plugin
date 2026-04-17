@@ -254,12 +254,14 @@ def _get_all_pane_ids(tmux_session: str) -> set[str]:
 
 
 def _get_fzf_pane_id(tmux_session: str) -> str:
-    """fzf pane(window 0의 index 0 pane) ID 반환. 실패 시 '0.0' 대체값."""
+    """fzf pane(window 0의 index 0 pane) ID 반환. 실패 시 세션:0.0 대체값."""
     result = subprocess.run(
         ["tmux", "list-panes", "-t", f"{tmux_session}:0",
          "-F", "#{pane_id} #{pane_index}"],
         capture_output=True, text=True,
     )
+    if result.returncode != 0:
+        return f"{tmux_session}:0.0"
     for line in result.stdout.strip().split("\n"):
         parts = line.strip().split()
         if len(parts) == 2 and parts[1] == "0":
@@ -274,6 +276,8 @@ def _find_bg_window_idx(session_id: str, tmux_session: str) -> str | None:
          "-F", "#{window_index} #{window_name}"],
         capture_output=True, text=True,
     )
+    if win_result.returncode != 0:
+        return None
     for line in win_result.stdout.strip().split("\n"):
         parts = line.strip().split(" ", 1)
         if len(parts) == 2 and parts[1] == session_id:
