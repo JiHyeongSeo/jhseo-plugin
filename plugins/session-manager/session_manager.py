@@ -162,8 +162,10 @@ def _tty_input(prompt: str) -> str:
             sys.stderr.write("\033[2J\033[H" + prompt)
             sys.stderr.flush()
             return tty.readline().rstrip("\n")
-    except OSError:
+    except (OSError, EOFError):
         return input(prompt)
+    except KeyboardInterrupt:
+        return ""
 
 
 def load_title_overrides() -> dict[str, str]:
@@ -283,6 +285,15 @@ def _find_bg_window_idx(session_id: str, tmux_session: str) -> str | None:
         if len(parts) == 2 and parts[1] == session_id:
             return parts[0]
     return None
+
+
+def _get_active_pane_id(tmux_session: str) -> str:
+    """window 0의 현재 활성 pane ID 반환. split/join 직후 호출하면 새 pane ID를 반환."""
+    r = subprocess.run(
+        ["tmux", "display-message", "-t", f"{tmux_session}:0", "-p", "#{pane_id}"],
+        capture_output=True, text=True,
+    )
+    return r.stdout.strip()
 
 
 def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
@@ -767,7 +778,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     right_width = _get_right_width(tmux_session)
 
     # 새 pane 생성 위치 결정 및 실행
-    before_panes = _get_all_pane_ids(tmux_session)
+    new_pane_id = ""
     if len(slots) == 0:
         # 오른쪽에 슬롯 없음 → fzf 기준 수평 분할
         fzf_pane = _get_fzf_pane_id(tmux_session)
@@ -777,8 +788,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
                 "-s", f"{tmux_session}:{bg_window_idx}",
                 "-t", fzf_pane,
             ])
-            after_panes = _get_all_pane_ids(tmux_session)
-            new_pane_id = next(iter(after_panes - before_panes), "")
+            new_pane_id = _get_active_pane_id(tmux_session)
             if new_pane_id:
                 subprocess.run(["tmux", "resize-pane", "-t", new_pane_id, "-x", str(right_width)])
         else:
@@ -787,8 +797,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
                 "-t", fzf_pane, "-c", work_dir,
                 f"claude --resume {session_id}",
             ])
-            after_panes = _get_all_pane_ids(tmux_session)
-            new_pane_id = next(iter(after_panes - before_panes), "")
+            new_pane_id = _get_active_pane_id(tmux_session)
 
     elif target_idx == 0:
         # 위 슬롯 위치 → 남은 아래 슬롯(%ref) 위에 삽입
@@ -805,8 +814,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
                 "-t", ref_pane_id, "-c", work_dir,
                 f"claude --resume {session_id}",
             ])
-        after_panes = _get_all_pane_ids(tmux_session)
-        new_pane_id = next(iter(after_panes - before_panes), "")
+        new_pane_id = _get_active_pane_id(tmux_session)
 
     else:
         # 아래 슬롯 위치 → 남은 위 슬롯(%ref) 아래에 삽입
@@ -823,8 +831,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
                 "-t", ref_pane_id, "-c", work_dir,
                 f"claude --resume {session_id}",
             ])
-        after_panes = _get_all_pane_ids(tmux_session)
-        new_pane_id = next(iter(after_panes - before_panes), "")
+        new_pane_id = _get_active_pane_id(tmux_session)
 
     if not new_pane_id:
         return
@@ -876,7 +883,6 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
     bg_window_idx = _find_bg_window_idx(session_id, tmux_session)
     slot0_pane_id = slots[0]["pane_id"]
 
-    before_panes = _get_all_pane_ids(tmux_session)
     if bg_window_idx is not None:
         subprocess.run([
             "tmux", "join-pane", "-v",
@@ -890,13 +896,130 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
             f"claude --resume {session_id}",
         ])
 
-    after_panes = _get_all_pane_ids(tmux_session)
-    new_pane_id = next(iter(after_panes - before_panes), "")
+    new_pane_id = _get_active_pane_id(tmux_session)
     if not new_pane_id:
         return
 
     slots.append({"session_id": session_id, "pane_id": new_pane_id})
     _write_state({"slots": slots, "background": bg_list_new})
+    subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
+
+
+def tmux_new_session(sessions_cache_path: str) -> None:
+    """Ctrl+N: 디렉터리를 선택해 새 Claude 세션 시작 (--resume 없이)."""
+    sessions: list[dict] = []
+    if sessions_cache_path:
+        try:
+            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not sessions:
+        sessions = load_all_sessions()
+
+    # 기존 세션 프로젝트 경로 (존재하는 것만, 우선 표시)
+    session_dirs = sorted({
+        s.get("projectPath", "")
+        for s in sessions
+        if s.get("projectPath") and Path(s.get("projectPath", "")).is_dir()
+    })
+
+    # home 아래 숨김 폴더 제외 3단계까지 탐색
+    try:
+        find_result = subprocess.run(
+            ["find", str(Path.home()), "-maxdepth", "3", "-type", "d",
+             "!", "-path", "*/.*",
+             "!", "-path", "*/node_modules/*",
+             "!", "-path", "*/__pycache__/*"],
+            capture_output=True, text=True, timeout=5,
+        )
+        find_dirs = [d for d in find_result.stdout.strip().split("\n") if d]
+    except subprocess.TimeoutExpired:
+        find_dirs = []
+
+    seen: set[str] = set(session_dirs)
+    all_dirs = list(session_dirs)
+    for d in find_dirs:
+        if d not in seen:
+            seen.add(d)
+            all_dirs.append(d)
+
+    if not all_dirs:
+        all_dirs = [str(Path.home())]
+
+    fzf_result = subprocess.run(
+        ["fzf",
+         "--prompt", "새 세션 경로 선택: ",
+         "--height", "80%", "--reverse", "--border",
+         "--header", "Enter:선택  Esc:취소"],
+        input="\n".join(all_dirs),
+        capture_output=True, text=True,
+    )
+    if fzf_result.returncode != 0:
+        return
+    selected_dir = fzf_result.stdout.strip()
+    if not selected_dir or not Path(selected_dir).is_dir():
+        return
+
+    tmux_session = "claude-browser"
+    state = _read_state()
+    slots: list[dict] = state.get("slots", [])
+    bg_list: list[str] = state.get("background", [])
+    right_width = _get_right_width(tmux_session)
+
+    target_idx = 0
+    if len(slots) == 2:
+        chosen = _ask_target_slot(slots, sessions)
+        if chosen is None:
+            return
+        target_idx = chosen
+
+    old_session_id = ""
+    if target_idx < len(slots):
+        old_slot = slots[target_idx]
+        old_pane_id = old_slot["pane_id"]
+        old_session_id = old_slot["session_id"]
+        subprocess.run([
+            "tmux", "break-pane", "-d",
+            "-s", old_pane_id,
+            "-n", old_session_id,
+        ])
+        if old_pane_id in _get_all_pane_ids(tmux_session):
+            subprocess.run(["tmux", "kill-pane", "-t", old_pane_id], capture_output=True)
+            old_session_id = ""
+        slots.pop(target_idx)
+
+    if old_session_id and old_session_id not in bg_list:
+        bg_list.append(old_session_id)
+
+    if len(slots) == 0:
+        fzf_pane = _get_fzf_pane_id(tmux_session)
+        subprocess.run([
+            "tmux", "split-window", "-h", "-l", str(right_width),
+            "-t", fzf_pane, "-c", selected_dir,
+            "claude",
+        ])
+    elif target_idx == 0:
+        ref_pane_id = slots[0]["pane_id"]
+        subprocess.run([
+            "tmux", "split-window", "-v", "-b",
+            "-t", ref_pane_id, "-c", selected_dir,
+            "claude",
+        ])
+    else:
+        ref_pane_id = slots[0]["pane_id"]
+        subprocess.run([
+            "tmux", "split-window", "-v",
+            "-t", ref_pane_id, "-c", selected_dir,
+            "claude",
+        ])
+
+    new_pane_id = _get_active_pane_id(tmux_session)
+    if not new_pane_id:
+        return
+
+    # session_id는 빈 문자열 — claude 시작 후 자체적으로 세션 생성
+    slots.insert(target_idx, {"session_id": "", "pane_id": new_pane_id})
+    _write_state({"slots": slots, "background": bg_list})
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
 
 
@@ -927,8 +1050,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             pass
 
     header = (
-        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-P:미리보기토글  Ctrl-D:삭제  Ctrl-T:제목편집\n"
-        "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-C:백그라운드(detach)  Ctrl-Q:완전종료"
+        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글  Ctrl-D:삭제  Ctrl-T:제목편집\n"
+        "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-Z:백그라운드(detach)  Ctrl-Q:완전종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -969,8 +1092,17 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
                 f" --sessions-cache {cache_file})"
                 f"+reload({_reload_with_cache})"
             ),
-            # ctrl-c: tmux detach (세션/프로세스 유지, cs로 재진입)
-            f"--bind=ctrl-c:execute-silent(tmux detach-client)",
+            # ctrl-n: 새 Claude 세션 생성 (디렉터리 선택)
+            (
+                f"--bind=ctrl-n:execute("
+                f"python3 {script_path} --tmux-new-session"
+                f" --sessions-cache {cache_file})"
+                f"+reload({_reload_with_cache})"
+            ),
+            # ctrl-c: 현재 동작 취소 (fzf 종료 방지)
+            f"--bind=ctrl-c:ignore",
+            # ctrl-z: tmux detach (세션/프로세스 유지, cs로 재진입)
+            f"--bind=ctrl-z:execute-silent(tmux detach-client)",
             # ctrl-q: 세션 완전 종료
             f"--bind=ctrl-q:execute-silent(tmux kill-session -t {tmux_session})+abort",
             "--bind=ctrl-p:toggle-preview",
@@ -1155,6 +1287,7 @@ def main() -> None:
     parser.add_argument("--tmux-browser", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-split-open", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-split-add", metavar="SESSION_ID", help=argparse.SUPPRESS)
+    parser.add_argument("--tmux-new-session", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/cs 심링크 설치"
@@ -1195,6 +1328,10 @@ def main() -> None:
 
     if args.tmux_split_add:
         tmux_split_add(args.tmux_split_add, args.sessions_cache or "")
+        return
+
+    if args.tmux_new_session:
+        tmux_new_session(args.sessions_cache or "")
         return
 
     # tmux 내부: fzf 브라우저 실행
