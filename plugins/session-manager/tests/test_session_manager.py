@@ -383,3 +383,42 @@ class TestLoadAllSessionsWithJsonl:
 
         assert len(result) == 1
         assert result[0]["sessionId"] == "s1"
+
+
+class TestGetAllPaneIds:
+    def test_returns_pane_ids(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = 0
+                stdout = "%10\n%23\n%24\n"
+            return R()
+        monkeypatch.setattr(session_manager.subprocess, "run", fake_run)
+        result = session_manager._get_all_pane_ids("claude-browser")
+        assert result == {"%10", "%23", "%24"}
+
+    def test_returns_empty_on_error(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = 1
+                stdout = ""
+            return R()
+        monkeypatch.setattr(session_manager.subprocess, "run", fake_run)
+        result = session_manager._get_all_pane_ids("claude-browser")
+        assert result == set()
+
+
+class TestReadStateNewFormat:
+    def test_default_has_slots_list(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
+        result = session_manager._read_state()
+        assert "slots" in result
+        assert result["slots"] == []
+        assert result["background"] == []
+
+    def test_reads_slots_format(self, tmp_path, monkeypatch):
+        state_file = tmp_path / "state.json"
+        state_file.write_text('{"slots": [{"session_id": "abc", "pane_id": "%23"}], "background": []}')
+        monkeypatch.setattr(session_manager, "_STATE_FILE", state_file)
+        result = session_manager._read_state()
+        assert result["slots"][0]["session_id"] == "abc"
+        assert result["slots"][0]["pane_id"] == "%23"

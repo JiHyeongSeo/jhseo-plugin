@@ -235,11 +235,50 @@ def _read_state() -> dict:
     try:
         return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"active": "", "background": []}
+        return {"slots": [], "background": []}
 
 
 def _write_state(state: dict) -> None:
     _STATE_FILE.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+
+def _get_all_pane_ids(tmux_session: str) -> set[str]:
+    """window 0의 모든 pane ID 반환 (%숫자 형식)."""
+    result = subprocess.run(
+        ["tmux", "list-panes", "-t", f"{tmux_session}:0", "-F", "#{pane_id}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return set()
+    return set(result.stdout.split())
+
+
+def _get_fzf_pane_id(tmux_session: str) -> str:
+    """fzf pane(window 0의 index 0 pane) ID 반환. 실패 시 '0.0' 대체값."""
+    result = subprocess.run(
+        ["tmux", "list-panes", "-t", f"{tmux_session}:0",
+         "-F", "#{pane_id} #{pane_index}"],
+        capture_output=True, text=True,
+    )
+    for line in result.stdout.strip().split("\n"):
+        parts = line.strip().split()
+        if len(parts) == 2 and parts[1] == "0":
+            return parts[0]
+    return f"{tmux_session}:0.0"
+
+
+def _find_bg_window_idx(session_id: str, tmux_session: str) -> str | None:
+    """session_id와 이름이 일치하는 bg window index 반환. 없으면 None."""
+    win_result = subprocess.run(
+        ["tmux", "list-windows", "-t", tmux_session,
+         "-F", "#{window_index} #{window_name}"],
+        capture_output=True, text=True,
+    )
+    for line in win_result.stdout.strip().split("\n"):
+        parts = line.strip().split(" ", 1)
+        if len(parts) == 2 and parts[1] == session_id:
+            return parts[0]
+    return None
 
 
 def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[str, set[str]]:
@@ -854,7 +893,7 @@ def run_tmux_layout() -> None:
     query_file = "/tmp/claude-browser-query.txt"
     Path(query_file).write_text("", encoding="utf-8")
     # 새 세션 시작 시 상태 초기화 (이전 실행의 stale 데이터 제거)
-    _write_state({"active": "", "background": []})
+    _write_state({"slots": [], "background": []})
 
     # tmux 세션 생성 (detached)
     subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session])
