@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -548,6 +548,15 @@ def _check_and_install_deps() -> None:
             out = subprocess.run(["fzf", "--version"], capture_output=True, text=True)
             fzf_ver = out.stdout.strip().split()[0] if out.stdout else ""
         except OSError:
+            pass
+        try:
+            parts = [int(x) for x in fzf_ver.split(".")[:3]]
+            if parts < [0, 38, 0]:
+                print(f"  ✗ fzf {fzf_ver} — 0.38.0 이상 필요")
+                print("    Ubuntu/Debian : sudo apt-get install -y fzf  (버전이 낮으면 snap/binary로 설치)")
+                print("    macOS         : brew upgrade fzf")
+                sys.exit(1)
+        except (ValueError, IndexError):
             pass
         print(f"  ✓ fzf {fzf_ver}")
     else:
