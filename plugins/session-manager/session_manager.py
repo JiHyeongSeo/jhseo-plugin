@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.5.1"
+VERSION = "1.5.2"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -1039,8 +1039,8 @@ def main() -> None:
     )
     # tmux 통합
     parser.add_argument(
-        "--tmux", action="store_true",
-        help="tmux 3분할 레이아웃으로 실행 (검색/preview/claude 세션 동시 표시)"
+        "--no-tmux", action="store_true",
+        help="tmux 없이 fzf 단독 모드로 실행"
     )
     parser.add_argument("--tmux-browser", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-open", metavar="SESSION_ID", help=argparse.SUPPRESS)
@@ -1191,12 +1191,13 @@ def main() -> None:
             print(f"{len(old)}개 삭제 완료.")
         return
 
-    # tmux 3분할 모드
-    if args.tmux:
+    # 기본: tmux 4분할 모드 (tmux 있고 --no-tmux 아닌 경우)
+    # cs 단독 실행 시 자동으로 tmux 레이아웃 실행, 기존 세션이면 재attach
+    if shutil.which("tmux") and not args.no_tmux:
         run_tmux_layout()
         return
 
-    # 기본: fzf 인터랙티브 모드
+    # 폴백: fzf 단독 모드 (tmux 없거나 --no-tmux 플래그)
     if not shutil.which("fzf"):
         print("fzf가 설치되지 않았습니다. --list 모드로 전환합니다.")
         print("fzf 설치: sudo apt install fzf  또는  brew install fzf")
