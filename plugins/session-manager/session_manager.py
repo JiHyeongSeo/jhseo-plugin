@@ -1097,7 +1097,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
                 f"--bind=ctrl-n:execute("
                 f"python3 {script_path} --tmux-new-session"
                 f" --sessions-cache {cache_file})"
-                f"+reload({_reload_with_cache})"
+                f"+reload({_reload_fresh})"
             ),
             # ctrl-c: 현재 동작 취소 (fzf 종료 방지)
             f"--bind=ctrl-c:ignore",
@@ -1120,9 +1120,9 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
                 f" --fzf-action edit-title {{-1}} --sessions-cache {cache_file})"
                 f"+reload({_reload_fresh})"
             ),
-            # 정렬 변경: query 보존 + 캐시 사용
-            f"--bind=ctrl-r:reload({_reload_with_cache} --sort date)",
-            f"--bind=ctrl-o:reload({_reload_with_cache} --sort project)",
+            # 정렬 변경: 디스크에서 새로 로드 (ctrl-r로 새 세션도 반영 가능)
+            f"--bind=ctrl-r:reload({_reload_fresh} --sort date)",
+            f"--bind=ctrl-o:reload({_reload_fresh} --sort project)",
         ],
         input="\n".join(lines),
         text=True,
