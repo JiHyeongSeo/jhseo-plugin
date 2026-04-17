@@ -736,6 +736,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     fzf --disabled: 클라이언트 필터링 OFF, Python 서버사이드 필터링 사용.
     검색어 → query_file 저장 → --fzf-list-lines reload → 메타데이터+대화 내용 검색.
     """
+    tmux_session = "claude-browser"
     sessions = load_all_sessions()
     sessions = sorted(sessions, key=lambda s: s.get("modified", ""), reverse=True)
     active_id, bg_ids = get_tmux_open_sessions()
@@ -757,7 +758,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
 
     header = (
         "Enter:오른쪽에 세션 열기  Ctrl-P:미리보기토글  Ctrl-D:삭제  Ctrl-T:제목편집\n"
-        "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-C:닫기"
+        "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-C:백그라운드(detach)  Ctrl-Q:완전종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -791,6 +792,10 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
                 f" --sessions-cache {cache_file})"
                 f"+reload({_reload_with_cache})"
             ),
+            # ctrl-c: tmux detach (세션/프로세스 유지, cs로 재진입)
+            f"--bind=ctrl-c:execute-silent(tmux detach-client)",
+            # ctrl-q: 세션 완전 종료
+            f"--bind=ctrl-q:execute-silent(tmux kill-session -t {tmux_session})+abort",
             "--bind=ctrl-p:toggle-preview",
             "--bind=shift-down:preview-down",
             "--bind=shift-up:preview-up",
@@ -856,12 +861,12 @@ def run_tmux_layout() -> None:
     # 마우스 활성화: 스크롤 시 copy mode 진입 (claude 대화 내용 스크롤 가능)
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "mouse", "on"])
 
-    # fzf 브라우저 실행 — 종료(Ctrl+C)시 tmux 세션 전체 kill
+    # fzf 브라우저 실행 — 종료 시 detach (세션 유지, cs로 재진입 가능)
     browser_cmd = (
         f"python3 {script_path} --tmux-browser"
         f" --sessions-cache {cache_file}"
         f" --query-file {query_file}"
-        f"; tmux kill-session -t {tmux_session} 2>/dev/null"
+        f"; tmux detach-client 2>/dev/null"
     )
     subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0", browser_cmd, "Enter"])
 
