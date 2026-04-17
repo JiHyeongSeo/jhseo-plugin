@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -487,11 +487,16 @@ def _check_and_install_deps() -> None:
 
 
 def install_cli() -> None:
-    """session_manager.py를 ~/.local/bin/claude-sessions 심링크로 설치."""
+    """session_manager.py를 ~/.local/bin/cs 심링크로 설치."""
     script_path = Path(__file__).resolve()
     bin_dir = Path.home() / ".local" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
-    link_path = bin_dir / "claude-sessions"
+    link_path = bin_dir / "cs"
+
+    # 이전 버전 심링크(claude-sessions) 제거
+    old_link = bin_dir / "claude-sessions"
+    if old_link.exists() or old_link.is_symlink():
+        old_link.unlink()
 
     if link_path.exists() or link_path.is_symlink():
         link_path.unlink()
@@ -987,7 +992,7 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(
-        prog="claude-sessions",
+        prog="cs",
         description="Claude Code 세션 브라우저",
     )
     parser.add_argument(
@@ -1044,7 +1049,7 @@ def main() -> None:
     parser.add_argument("--right-pane2", metavar="PANE", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
-        help="install: ~/.local/bin/claude-sessions 심링크 설치"
+        help="install: ~/.local/bin/cs 심링크 설치"
     )
 
     args = parser.parse_args()
