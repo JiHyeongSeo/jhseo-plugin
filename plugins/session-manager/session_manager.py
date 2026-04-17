@@ -1195,11 +1195,12 @@ def run_tmux_layout() -> None:
     # 마우스 활성화: 스크롤 시 copy mode 진입 (claude 대화 내용 스크롤 가능)
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "mouse", "on"])
 
-    # fzf 브라우저 실행 — 종료 시 detach (세션 유지, cs로 재진입 가능)
+    # fzf 브라우저 실행 — 오류 시 메시지 표시 후 Enter 대기, 정상 종료 시 detach
     browser_cmd = (
         f"stty -ixon; python3 {script_path} --tmux-browser"
         f" --sessions-cache {cache_file}"
         f" --query-file {query_file}"
+        f" || (echo ''; echo '[cs 오류] 위 메시지를 확인하세요. Enter로 종료...'; read _)"
         f"; tmux detach-client 2>/dev/null"
     )
     subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0", browser_cmd, "Enter"])
