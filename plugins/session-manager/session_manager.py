@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.5.2"
+VERSION = "1.5.3"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -808,6 +808,8 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "send-keys", "-t", preview_pane_id, watch_cmd, "Enter"])
 
     # 좌상단: fzf 브라우저 실행 (우상단·우하단 pane ID 전달)
+    # fzf 종료(Ctrl-C 포함) 시 tmux 세션 전체 종료 → 깔끔한 종료
+    # 오른쪽 세션을 유지하려면 Ctrl-B D 로 detach 후 cs 재실행 시 재attach
     browser_cmd = (
         f"python3 {script_path} --tmux-browser"
         f" --preview-file {preview_file}"
@@ -815,6 +817,7 @@ def run_tmux_layout() -> None:
         f" --right-pane2 '{right2_pane_id}'"
         f" --sessions-cache {cache_file}"
         f" --query-file {query_file}"
+        f"; tmux kill-session -t {tmux_session} 2>/dev/null"
     )
     subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0.0", browser_cmd, "Enter"])
 
