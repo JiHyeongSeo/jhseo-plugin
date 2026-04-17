@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.2"
+VERSION = "2.0.3"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -542,6 +542,37 @@ def _try_install_rich() -> bool:
 
 def _check_and_install_deps() -> None:
     print("\n[의존성 확인]")
+    # Python 버전 체크
+    if sys.version_info < (3, 10):
+        ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        print(f"  ✗ Python {ver} — 3.10 이상 필요")
+        sys.exit(1)
+    print(f"  ✓ Python {sys.version_info.major}.{sys.version_info.minor}")
+
+    # tmux 버전 체크
+    if shutil.which("tmux"):
+        tmux_ver = ""
+        try:
+            out = subprocess.run(["tmux", "-V"], capture_output=True, text=True)
+            tmux_ver = out.stdout.strip().split()[-1] if out.stdout else ""
+        except OSError:
+            pass
+        try:
+            parts = [int(x) for x in tmux_ver.rstrip("abcdefghijklmnopqrstuvwxyz").split(".")[:2]]
+            if parts < [2, 1]:
+                print(f"  ✗ tmux {tmux_ver} — 2.1 이상 필요")
+                print("    Ubuntu/Debian : sudo apt-get install -y tmux")
+                print("    macOS         : brew upgrade tmux")
+                sys.exit(1)
+        except (ValueError, IndexError):
+            pass
+        print(f"  ✓ tmux {tmux_ver}")
+    else:
+        print("  ✗ tmux 없음 (필수)")
+        print("    Ubuntu/Debian : sudo apt-get install -y tmux")
+        print("    macOS         : brew install tmux")
+        sys.exit(1)
+
     if shutil.which("fzf"):
         fzf_ver = ""
         try:
