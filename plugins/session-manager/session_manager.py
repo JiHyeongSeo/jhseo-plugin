@@ -767,66 +767,64 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     right_width = _get_right_width(tmux_session)
 
     # 새 pane 생성 위치 결정 및 실행
-    new_pane_id = ""
+    before_panes = _get_all_pane_ids(tmux_session)
     if len(slots) == 0:
         # 오른쪽에 슬롯 없음 → fzf 기준 수평 분할
         fzf_pane = _get_fzf_pane_id(tmux_session)
         if bg_window_idx is not None:
-            r = subprocess.run([
+            subprocess.run([
                 "tmux", "join-pane", "-h",
                 "-s", f"{tmux_session}:{bg_window_idx}",
                 "-t", fzf_pane,
-                "-P", "-F", "#{pane_id}",
-            ], capture_output=True, text=True)
-            new_pane_id = r.stdout.strip()
+            ])
+            after_panes = _get_all_pane_ids(tmux_session)
+            new_pane_id = next(iter(after_panes - before_panes), "")
             if new_pane_id:
                 subprocess.run(["tmux", "resize-pane", "-t", new_pane_id, "-x", str(right_width)])
         else:
-            r = subprocess.run([
+            subprocess.run([
                 "tmux", "split-window", "-h", "-l", str(right_width),
                 "-t", fzf_pane, "-c", work_dir,
-                "-P", "-F", "#{pane_id}",
                 f"claude --resume {session_id}",
-            ], capture_output=True, text=True)
-            new_pane_id = r.stdout.strip()
+            ])
+            after_panes = _get_all_pane_ids(tmux_session)
+            new_pane_id = next(iter(after_panes - before_panes), "")
 
     elif target_idx == 0:
         # 위 슬롯 위치 → 남은 아래 슬롯(%ref) 위에 삽입
         ref_pane_id = slots[0]["pane_id"]
         if bg_window_idx is not None:
-            r = subprocess.run([
+            subprocess.run([
                 "tmux", "join-pane", "-v", "-b",
                 "-s", f"{tmux_session}:{bg_window_idx}",
                 "-t", ref_pane_id,
-                "-P", "-F", "#{pane_id}",
-            ], capture_output=True, text=True)
+            ])
         else:
-            r = subprocess.run([
+            subprocess.run([
                 "tmux", "split-window", "-v", "-b",
                 "-t", ref_pane_id, "-c", work_dir,
-                "-P", "-F", "#{pane_id}",
                 f"claude --resume {session_id}",
-            ], capture_output=True, text=True)
-        new_pane_id = r.stdout.strip()
+            ])
+        after_panes = _get_all_pane_ids(tmux_session)
+        new_pane_id = next(iter(after_panes - before_panes), "")
 
     else:
         # 아래 슬롯 위치 → 남은 위 슬롯(%ref) 아래에 삽입
         ref_pane_id = slots[0]["pane_id"]
         if bg_window_idx is not None:
-            r = subprocess.run([
+            subprocess.run([
                 "tmux", "join-pane", "-v",
                 "-s", f"{tmux_session}:{bg_window_idx}",
                 "-t", ref_pane_id,
-                "-P", "-F", "#{pane_id}",
-            ], capture_output=True, text=True)
+            ])
         else:
-            r = subprocess.run([
+            subprocess.run([
                 "tmux", "split-window", "-v",
                 "-t", ref_pane_id, "-c", work_dir,
-                "-P", "-F", "#{pane_id}",
                 f"claude --resume {session_id}",
-            ], capture_output=True, text=True)
-        new_pane_id = r.stdout.strip()
+            ])
+        after_panes = _get_all_pane_ids(tmux_session)
+        new_pane_id = next(iter(after_panes - before_panes), "")
 
     if not new_pane_id:
         return
@@ -878,22 +876,22 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
     bg_window_idx = _find_bg_window_idx(session_id, tmux_session)
     slot0_pane_id = slots[0]["pane_id"]
 
+    before_panes = _get_all_pane_ids(tmux_session)
     if bg_window_idx is not None:
-        r = subprocess.run([
+        subprocess.run([
             "tmux", "join-pane", "-v",
             "-s", f"{tmux_session}:{bg_window_idx}",
             "-t", slot0_pane_id,
-            "-P", "-F", "#{pane_id}",
-        ], capture_output=True, text=True)
+        ])
     else:
-        r = subprocess.run([
+        subprocess.run([
             "tmux", "split-window", "-v",
             "-t", slot0_pane_id, "-c", work_dir,
-            "-P", "-F", "#{pane_id}",
             f"claude --resume {session_id}",
-        ], capture_output=True, text=True)
+        ])
 
-    new_pane_id = r.stdout.strip()
+    after_panes = _get_all_pane_ids(tmux_session)
+    new_pane_id = next(iter(after_panes - before_panes), "")
     if not new_pane_id:
         return
 
@@ -1042,7 +1040,7 @@ def run_tmux_layout() -> None:
 
     # fzf 브라우저 실행 — 종료 시 detach (세션 유지, cs로 재진입 가능)
     browser_cmd = (
-        f"python3 {script_path} --tmux-browser"
+        f"stty -ixon; python3 {script_path} --tmux-browser"
         f" --sessions-cache {cache_file}"
         f" --query-file {query_file}"
         f"; tmux detach-client 2>/dev/null"
