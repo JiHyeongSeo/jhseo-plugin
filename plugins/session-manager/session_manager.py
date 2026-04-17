@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.3"
+VERSION = "2.0.4"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -1108,8 +1108,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             pass
 
     header = (
-        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글  Ctrl-D:삭제  Ctrl-T:제목편집\n"
-        "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-Z:백그라운드(detach)  Ctrl-Q:완전종료"
+        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
+        "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -1122,11 +1122,23 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
         f"printf '%s' {{q}} > {query_file}; "
         f"python3 {script_path} --fzf-list-lines --query-file {query_file}"
     )
+    # 정렬 토글: sort 상태 파일을 갱신하고 새로 로드
+    _toggle_sort = (
+        f"printf '%s' {{q}} > {query_file}; "
+        f"python3 {script_path} --fzf-toggle-sort --query-file {query_file}"
+    )
+
+    # sort 상태 초기화
+    try:
+        Path("/tmp/claude-browser-sort.txt").write_text("date", encoding="utf-8")
+    except OSError:
+        pass
 
     subprocess.run(
         [
             "fzf",
             "--ansi", "--disabled", "--no-sort", "--layout=reverse", "--border",
+            "--multi",
             "--prompt=세션 검색> ",
             f"--header={header}",
             "--color=hl:#ffaf00,hl+:#ffaf00",
@@ -1136,6 +1148,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             f"--bind=change:reload({_reload_with_cache})+refresh-preview",
             # 시작 시 green/yellow 점 동기화
             f"--bind=start:reload(python3 {script_path} --fzf-list-lines --sessions-cache {cache_file})",
+            # Tab: 다중 선택 후 아래로 이동
+            "--bind=tab:toggle+down",
             # Enter: 세션 열고 목록 reload (query 보존)
             (
                 f"--bind=enter:execute("
@@ -1166,10 +1180,10 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             "--bind=ctrl-p:toggle-preview",
             "--bind=shift-down:preview-down",
             "--bind=shift-up:preview-up",
-            # ctrl-d: 삭제 후 파일에서 새로 로드 (삭제된 항목 제거)
+            # ctrl-d: 선택 항목 삭제 ({+f}로 다중 선택 전달)
             (
                 f"--bind=ctrl-d:execute(python3 {script_path}"
-                f" --fzf-action delete {{-1}} --sessions-cache {cache_file})"
+                f" --fzf-action delete {{+f}} --sessions-cache {cache_file})"
                 f"+reload({_reload_fresh})"
             ),
             # ctrl-t: 제목 편집 후 새로 로드 (title override 반영)
@@ -1178,9 +1192,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
                 f" --fzf-action edit-title {{-1}} --sessions-cache {cache_file})"
                 f"+reload({_reload_fresh})"
             ),
-            # 정렬 변경: 디스크에서 새로 로드 (ctrl-r로 새 세션도 반영 가능)
-            f"--bind=ctrl-r:reload({_reload_fresh} --sort date)",
-            f"--bind=ctrl-o:reload({_reload_fresh} --sort project)",
+            # ctrl-r: 정렬 토글 (date ↔ project)
+            f"--bind=ctrl-r:reload({_toggle_sort})",
         ],
         input="\n".join(lines),
         text=True,
@@ -1219,7 +1232,10 @@ def run_tmux_layout() -> None:
             capture_output=True, text=True,
         ).stdout.strip().splitlines()
         if "0" in fzf_alive:
-            subprocess.run(["tmux", "attach-session", "-t", tmux_session])
+            if os.environ.get("TMUX"):
+                subprocess.run(["tmux", "switch-client", "-t", tmux_session])
+            else:
+                subprocess.run(["tmux", "attach-session", "-t", tmux_session])
             return
         # fzf pane이 죽은 상태 → 세션 제거 후 재시작
         subprocess.run(["tmux", "kill-session", "-t", tmux_session], capture_output=True)
@@ -1245,8 +1261,11 @@ def run_tmux_layout() -> None:
     )
     subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0", browser_cmd, "Enter"])
 
-    # attach (블로킹 — detach 또는 세션 종료까지)
-    subprocess.run(["tmux", "attach-session", "-t", tmux_session])
+    # 이미 tmux 안에 있으면 switch-client, 아니면 attach-session
+    if os.environ.get("TMUX"):
+        subprocess.run(["tmux", "switch-client", "-t", tmux_session])
+    else:
+        subprocess.run(["tmux", "attach-session", "-t", tmux_session])
 
 
 # ─── 기존 fzf 단독 모드 ───────────────────────────────────────────────────────
@@ -1277,33 +1296,44 @@ def run_fzf(sessions: list[dict]) -> dict | None:
             qf.write("")
             query_file = qf.name
 
+        _toggle_sort = (
+            f"printf '%s' {{q}} > {query_file}; "
+            f"python3 {script_path} --fzf-toggle-sort --sessions-cache {cache_file} --query-file {query_file}"
+        )
+        _reload_fresh = (
+            f"printf '%s' {{q}} > {query_file}; "
+            f"python3 {script_path} --fzf-list-lines --query-file {query_file}"
+        )
+        Path("/tmp/claude-browser-sort.txt").write_text("date", encoding="utf-8")
+
         subprocess.run(
             [
                 "fzf",
                 "--ansi", "--exact", "--height=90%",
                 "--layout=reverse", "--border",
                 "--prompt=세션 검색> ",
-                "--header=Enter:Resume  Ctrl-D:삭제  Ctrl-T:제목편집  Ctrl-P:미리보기토글  Ctrl-C:닫기\nShift+↓↑:미리보기스크롤  Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬",
+                "--header=Enter:Resume  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-P:미리보기토글  Ctrl-C:닫기\nShift+↓↑:미리보기스크롤  Tab:다중선택  Ctrl-R:정렬토글",
+                "--multi",
                 "--color=hl:#ffaf00,hl+:#ffaf00",
                 f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file} --query-file {query_file}",
                 "--preview-window=bottom:40%:wrap",
                 f"--bind=change:execute-silent(printf '%s' {{q}} > {query_file})+refresh-preview",
                 f"--bind=enter:execute(printf 'resume:%s' {{-1}} > {action_file} 2>/dev/null)+abort",
+                "--bind=tab:toggle+down",
                 (
                     f"--bind=ctrl-d:execute(python3 {script_path}"
-                    f" --fzf-action delete {{-1}} --sessions-cache {cache_file})"
-                    f"+reload(python3 {script_path} --fzf-list-lines)"
+                    f" --fzf-action delete {{+f}} --sessions-cache {cache_file})"
+                    f"+reload({_reload_fresh})"
                 ),
                 (
                     f"--bind=ctrl-t:execute(python3 {script_path}"
                     f" --fzf-action edit-title {{-1}} --sessions-cache {cache_file})"
-                    f"+reload(python3 {script_path} --fzf-list-lines)"
+                    f"+reload({_reload_fresh})"
                 ),
                 "--bind=ctrl-p:toggle-preview",
                 "--bind=shift-down:preview-down",
                 "--bind=shift-up:preview-up",
-                f"--bind=ctrl-r:reload(python3 {script_path} --fzf-list-lines --sort date)",
-                f"--bind=ctrl-o:reload(python3 {script_path} --fzf-list-lines --sort project)",
+                f"--bind=ctrl-r:reload({_toggle_sort})",
             ],
             input="\n".join(lines),
             text=True,
@@ -1345,6 +1375,7 @@ def main() -> None:
     parser.add_argument("--preview-id", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--sessions-cache", metavar="PATH", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-list-lines", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--fzf-toggle-sort", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--sort", choices=["date", "project"], default="date", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-action", nargs="+", metavar=("ACTION", "SESSION_ID"), help=argparse.SUPPRESS)
     parser.add_argument("--highlight", nargs="*", default=[], help=argparse.SUPPRESS)
@@ -1440,10 +1471,51 @@ def main() -> None:
             print(format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids))
         return
 
+    # 정렬 토글: date ↔ project 순환 후 목록 출력
+    if args.fzf_toggle_sort:
+        _sort_file = Path("/tmp/claude-browser-sort.txt")
+        try:
+            current_sort = _sort_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            current_sort = "date"
+        new_sort = "project" if current_sort == "date" else "date"
+        try:
+            _sort_file.write_text(new_sort, encoding="utf-8")
+        except OSError:
+            pass
+
+        sessions = None
+        if args.sessions_cache:
+            try:
+                sessions = json.loads(Path(args.sessions_cache).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass
+        if sessions is None:
+            sessions = load_all_sessions()
+
+        if new_sort == "project":
+            sessions.sort(key=lambda s: (s.get("projectPath", ""), s.get("modified", "")))
+        else:
+            sessions.sort(key=lambda s: s.get("modified", ""), reverse=True)
+
+        query = ""
+        if args.query_file:
+            try:
+                query = Path(args.query_file).read_text(encoding="utf-8").strip()
+            except OSError:
+                pass
+        if query:
+            sessions = filter_sessions_by_query(sessions, query)
+
+        slot_ids, bg_ids = get_tmux_open_sessions()
+        for s in sessions:
+            print(format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids))
+        return
+
     # fzf 액션: delete / edit-title
     if args.fzf_action:
         fzf_action_name = args.fzf_action[0]
-        fzf_session_id = args.fzf_action[1] if len(args.fzf_action) > 1 else ""
+        fzf_arg = args.fzf_action[1] if len(args.fzf_action) > 1 else ""
 
         if args.sessions_cache:
             try:
@@ -1453,6 +1525,38 @@ def main() -> None:
         else:
             cached = load_all_sessions()
 
+        if fzf_action_name == "delete":
+            # {+f}: fzf가 선택 항목을 파일로 전달 (다중 선택 지원)
+            arg_path = Path(fzf_arg)
+            if arg_path.exists():
+                session_ids = [
+                    line.strip().split()[-1]
+                    for line in arg_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+            else:
+                session_ids = [fzf_arg] if fzf_arg else []
+
+            targets = [s for s in cached if s.get("sessionId") in session_ids]
+            if not targets:
+                sys.stderr.write("\n  세션을 찾을 수 없습니다.\n")
+                sys.stderr.flush()
+                return
+
+            if len(targets) == 1:
+                label = f"'{get_display_summary(targets[0])[:40]}'"
+            else:
+                label = f"{len(targets)}개 세션"
+            confirm = _tty_input(f"\n  삭제: {label} (y/N) ").strip().lower()
+            if confirm == "y":
+                for t in targets:
+                    delete_session(t)
+                sys.stderr.write(f"  {len(targets)}개 삭제 완료.\n")
+                sys.stderr.flush()
+            return
+
+        # edit-title은 단일 세션만
+        fzf_session_id = fzf_arg
         target = next((s for s in cached if s.get("sessionId") == fzf_session_id), None)
         if not target:
             print(f"\n  세션을 찾을 수 없습니다: {fzf_session_id}")
@@ -1460,14 +1564,7 @@ def main() -> None:
 
         summary = get_display_summary(target)
 
-        if fzf_action_name == "delete":
-            confirm = _tty_input(f"\n  삭제: '{summary[:40]}' (y/N) ").strip().lower()
-            if confirm == "y":
-                delete_session(target)
-                sys.stderr.write("  삭제 완료.\n")
-                sys.stderr.flush()
-
-        elif fzf_action_name == "edit-title":
+        if fzf_action_name == "edit-title":
             new_title = _tty_input(f"\n  새 제목 (현재: {summary[:40]}): ").strip()
             if new_title:
                 save_title_override(fzf_session_id, new_title)
