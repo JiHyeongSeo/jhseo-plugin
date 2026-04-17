@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -548,6 +548,15 @@ def _check_and_install_deps() -> None:
             out = subprocess.run(["fzf", "--version"], capture_output=True, text=True)
             fzf_ver = out.stdout.strip().split()[0] if out.stdout else ""
         except OSError:
+            pass
+        try:
+            parts = [int(x) for x in fzf_ver.split(".")[:3]]
+            if parts < [0, 38, 0]:
+                print(f"  ✗ fzf {fzf_ver} — 0.38.0 이상 필요")
+                print("    Ubuntu/Debian : sudo apt-get install -y fzf  (버전이 낮으면 snap/binary로 설치)")
+                print("    macOS         : brew upgrade fzf")
+                sys.exit(1)
+        except (ValueError, IndexError):
             pass
         print(f"  ✓ fzf {fzf_ver}")
     else:
@@ -1179,7 +1188,10 @@ def run_tmux_layout() -> None:
             capture_output=True, text=True,
         ).stdout.strip().splitlines()
         if "0" in fzf_alive:
-            subprocess.run(["tmux", "attach-session", "-t", tmux_session])
+            if os.environ.get("TMUX"):
+                subprocess.run(["tmux", "switch-client", "-t", tmux_session])
+            else:
+                subprocess.run(["tmux", "attach-session", "-t", tmux_session])
             return
         # fzf pane이 죽은 상태 → 세션 제거 후 재시작
         subprocess.run(["tmux", "kill-session", "-t", tmux_session], capture_output=True)
@@ -1205,8 +1217,11 @@ def run_tmux_layout() -> None:
     )
     subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0", browser_cmd, "Enter"])
 
-    # attach (블로킹 — detach 또는 세션 종료까지)
-    subprocess.run(["tmux", "attach-session", "-t", tmux_session])
+    # 이미 tmux 안에 있으면 switch-client, 아니면 attach-session
+    if os.environ.get("TMUX"):
+        subprocess.run(["tmux", "switch-client", "-t", tmux_session])
+    else:
+        subprocess.run(["tmux", "attach-session", "-t", tmux_session])
 
 
 # ─── 기존 fzf 단독 모드 ───────────────────────────────────────────────────────
