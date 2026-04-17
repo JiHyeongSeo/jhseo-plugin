@@ -1,0 +1,23 @@
+{
+  "name": "jhseo-plugins",
+  "owner": {
+    "name": "JiHyeong Seo",
+    "email": "seojihyeong@nexon.co.kr"
+  },
+  "metadata": {
+    "description": "JiHyeong Seo의 개인 Claude Code 플러그인 모음"
+  },
+  "plugins": [
+    {
+      "name": "session-manager",
+      "source": "./plugins/session-manager",
+      "description": "Claude Code 세션 브라우저. 멀티슬롯 tmux 패널, fzf 검색, resume/삭제 관리",
+      "version": "2.0.0",
+      "author": {
+        "name": "JiHyeong Seo"
+      },
+      "keywords": ["session", "resume", "browser", "fzf", "tmux", "세션", "세션관리"],
+      "category": "productivity"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "session-manager",
+  "description": "Claude Code 세션 브라우저. 멀티슬롯 tmux 패널, fzf 검색, resume/삭제 관리",
+  "version": "2.0.0",
+  "author": {
+    "name": "JiHyeong Seo"
+  },
+  "homepage": "https://github.com/JiHyeongSeo/jhseo-plugin",
+  "repository": "https://github.com/JiHyeongSeo/jhseo-plugin.git",
+  "keywords": [
+    "session",
+    "resume",
+    "browser",
+    "fzf",
+    "tmux",
+    "세션",
+    "세션관리"
+  ]
+}
