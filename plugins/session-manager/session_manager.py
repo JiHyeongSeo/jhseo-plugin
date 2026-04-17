@@ -660,6 +660,31 @@ def format_session_preview(session: dict, highlight: str = "") -> str:
 
 # ─── tmux 통합: 왼쪽 fzf 브라우저 + Enter시 오른쪽 분할 ─────────────────────
 
+def _ask_target_slot(slots: list[dict], sessions: list[dict]) -> int | None:
+    """슬롯 선택 프롬프트. 선택된 슬롯 인덱스(0 or 1) 반환, 취소/잘못된 입력은 None."""
+    labels = ["위", "아래"]
+    lines = ["\n  어느 슬롯에 열까요?\n"]
+    for i, slot in enumerate(slots[:2]):
+        sid = slot["session_id"]
+        session = next((s for s in sessions if s.get("sessionId") == sid), None)
+        project = (session.get("projectPath", "?").split("/")[-1] if session else "?")[:15]
+        summary = get_display_summary(session)[:35] if session else sid[:20]
+        lines.append(f"  {i + 1}) {labels[i]:<4} │ {project} — {summary}")
+    lines.append(f"\n  선택 (1/{len(slots[:2])}): ")
+    prompt = "\n".join(lines)
+    try:
+        choice = _tty_input(prompt).strip()
+    except (KeyboardInterrupt, EOFError):
+        return None
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(slots):
+            return idx
+    except ValueError:
+        pass
+    return None
+
+
 def _get_right_width(tmux_session: str) -> int:
     """tmux 윈도우 너비의 60%를 절대값으로 반환."""
     w_result = subprocess.run(
