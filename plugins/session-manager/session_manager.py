@@ -1170,12 +1170,19 @@ def run_tmux_layout() -> None:
     tmux_session = "claude-browser"
     script_path = Path(__file__).resolve()
 
-    # 이미 실행 중이면 재attach
+    # 이미 실행 중이면 재attach — fzf pane(index 0)이 살아있을 때만
     if subprocess.run(
         ["tmux", "has-session", "-t", tmux_session], capture_output=True
     ).returncode == 0:
-        subprocess.run(["tmux", "attach-session", "-t", tmux_session])
-        return
+        fzf_alive = subprocess.run(
+            ["tmux", "list-panes", "-t", f"{tmux_session}:0", "-F", "#{pane_index}"],
+            capture_output=True, text=True,
+        ).stdout.strip().splitlines()
+        if "0" in fzf_alive:
+            subprocess.run(["tmux", "attach-session", "-t", tmux_session])
+            return
+        # fzf pane이 죽은 상태 → 세션 제거 후 재시작
+        subprocess.run(["tmux", "kill-session", "-t", tmux_session], capture_output=True)
 
     cache_file = "/tmp/claude-browser-cache.json"
     query_file = "/tmp/claude-browser-query.txt"
