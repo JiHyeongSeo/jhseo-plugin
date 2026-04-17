@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "1.9.0"
+VERSION = "2.0.0"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -837,6 +837,71 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
 
 
+def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
+    """Ctrl+S: 슬롯 2 생성. 슬롯이 1개일 때만 동작.
+
+    슬롯 0개 또는 2개: 무시
+    이미 슬롯에 열린 세션: 해당 슬롯 포커스
+    """
+    sessions: list[dict] = []
+    if sessions_cache_path:
+        try:
+            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not sessions:
+        sessions = load_all_sessions()
+
+    session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    if not session:
+        return
+
+    project_path = session.get("projectPath", "")
+    tmux_session = "claude-browser"
+    work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
+
+    state = _read_state()
+    slots: list[dict] = state.get("slots", [])
+    bg_list: list[str] = state.get("background", [])
+
+    # 슬롯 1개일 때만 동작
+    if len(slots) != 1:
+        return
+
+    # 이미 슬롯에 열린 세션이면 포커스만
+    for slot in slots:
+        if slot["session_id"] == session_id:
+            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
+            return
+
+    bg_list_new = [s for s in bg_list if s != session_id]
+    bg_window_idx = _find_bg_window_idx(session_id, tmux_session)
+    slot0_pane_id = slots[0]["pane_id"]
+
+    if bg_window_idx is not None:
+        r = subprocess.run([
+            "tmux", "join-pane", "-v",
+            "-s", f"{tmux_session}:{bg_window_idx}",
+            "-t", slot0_pane_id,
+            "-P", "-F", "#{pane_id}",
+        ], capture_output=True, text=True)
+    else:
+        r = subprocess.run([
+            "tmux", "split-window", "-v",
+            "-t", slot0_pane_id, "-c", work_dir,
+            "-P", "-F", "#{pane_id}",
+            f"claude --resume {session_id}",
+        ], capture_output=True, text=True)
+
+    new_pane_id = r.stdout.strip()
+    if not new_pane_id:
+        return
+
+    slots.append({"session_id": session_id, "pane_id": new_pane_id})
+    _write_state({"slots": slots, "background": bg_list_new})
+    subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
+
+
 def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     """tmux 세션 안의 왼쪽 pane에서 실행되는 fzf 브라우저.
 
@@ -864,7 +929,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             pass
 
     header = (
-        "Enter:오른쪽에 세션 열기  Ctrl-P:미리보기토글  Ctrl-D:삭제  Ctrl-T:제목편집\n"
+        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-P:미리보기토글  Ctrl-D:삭제  Ctrl-T:제목편집\n"
         "Ctrl-R:날짜정렬  Ctrl-O:프로젝트정렬  Ctrl-C:백그라운드(detach)  Ctrl-Q:완전종료"
     )
 
@@ -896,6 +961,13 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             (
                 f"--bind=enter:execute("
                 f"python3 {script_path} --tmux-split-open {{-1}}"
+                f" --sessions-cache {cache_file})"
+                f"+reload({_reload_with_cache})"
+            ),
+            # ctrl-s: 슬롯 2 추가 (슬롯 1개일 때만 동작)
+            (
+                f"--bind=ctrl-s:execute("
+                f"python3 {script_path} --tmux-split-add {{-1}}"
                 f" --sessions-cache {cache_file})"
                 f"+reload({_reload_with_cache})"
             ),
@@ -1084,6 +1156,7 @@ def main() -> None:
     # tmux 내부 실행용
     parser.add_argument("--tmux-browser", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-split-open", metavar="SESSION_ID", help=argparse.SUPPRESS)
+    parser.add_argument("--tmux-split-add", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/cs 심링크 설치"
@@ -1120,6 +1193,10 @@ def main() -> None:
     # tmux 내부: 오른쪽 분할 열기
     if args.tmux_split_open:
         tmux_split_open(args.tmux_split_open, args.sessions_cache or "")
+        return
+
+    if args.tmux_split_add:
+        tmux_split_add(args.tmux_split_add, args.sessions_cache or "")
         return
 
     # tmux 내부: fzf 브라우저 실행
