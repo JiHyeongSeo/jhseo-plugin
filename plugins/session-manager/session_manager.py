@@ -285,26 +285,25 @@ def _find_bg_window_idx(session_id: str, tmux_session: str) -> str | None:
     return None
 
 
-def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[str, set[str]]:
+def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
     """상태 파일 + tmux 실제 상태로 열린 세션 목록 반환.
 
     Returns:
-        (active_session_id, {background_session_ids})
+        (slot_session_ids, background_session_ids)
+        slot_session_ids: 현재 pane에 열린 세션 (초록 표시)
+        background_session_ids: bg window에 보존된 세션 (노랑 표시)
     """
     state = _read_state()
-    active = state.get("active", "")
+    slots: list[dict] = state.get("slots", [])
     bg_list: list[str] = state.get("background", [])
 
-    # pane 1이 실제로 있는지 검증 (없으면 active 초록 표시 제거)
-    if active:
-        pane_result = subprocess.run(
-            ["tmux", "list-panes", "-t", f"{tmux_session}:0", "-F", "#{pane_index}"],
-            capture_output=True, text=True,
-        )
-        if "1" not in pane_result.stdout.split():
-            active = ""
+    all_pane_ids = _get_all_pane_ids(tmux_session)
+    slot_ids = {
+        slot["session_id"]
+        for slot in slots
+        if slot.get("pane_id", "") in all_pane_ids
+    }
 
-    # 백그라운드 세션 중 실제 tmux window가 있는 것만 필터
     bg_sessions: set[str] = set()
     if bg_list:
         win_result = subprocess.run(
@@ -315,10 +314,14 @@ def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[str, s
             window_names = set(win_result.stdout.split())
             bg_sessions = {s for s in bg_list if s in window_names}
 
-    return active, bg_sessions
+    return slot_ids, bg_sessions
 
 
-def format_session_line(session: dict, active_id: str = "", bg_ids: set[str] | None = None) -> str:
+def format_session_line(
+    session: dict,
+    slot_ids: set[str] | None = None,
+    bg_ids: set[str] | None = None,
+) -> str:
     date = session.get("modified", "")[:10]
     project = session.get("projectPath", "?").split("/")[-1]
     summary = get_display_summary(session)[:60]
@@ -326,7 +329,7 @@ def format_session_line(session: dict, active_id: str = "", bg_ids: set[str] | N
     msgs = session.get("messageCount", 0)
     session_id = session.get("sessionId", "")
 
-    if session_id == active_id:
+    if slot_ids and session_id in slot_ids:
         indicator = "\x1b[32m● \x1b[0m"
     elif bg_ids and session_id in bg_ids:
         indicator = "\x1b[33m● \x1b[0m"
@@ -782,13 +785,13 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     tmux_session = "claude-browser"
     sessions = load_all_sessions()
     sessions = sorted(sessions, key=lambda s: s.get("modified", ""), reverse=True)
-    active_id, bg_ids = get_tmux_open_sessions()
+    slot_ids, bg_ids = get_tmux_open_sessions()
 
     # 시작 시 _searchContent 미리 계산 (reload 시 캐시에서 재사용)
     for s in sessions:
         s["_searchContent"] = get_search_content(s)
 
-    lines = [format_session_line(s, active_id=active_id, bg_ids=bg_ids) for s in sessions]
+    lines = [format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids) for s in sessions]
     script_path = Path(__file__).resolve()
 
     if cache_file:
@@ -1093,9 +1096,9 @@ def main() -> None:
         if query:
             sessions = filter_sessions_by_query(sessions, query)
 
-        active_id, bg_ids = get_tmux_open_sessions()
+        slot_ids, bg_ids = get_tmux_open_sessions()
         for s in sessions:
-            print(format_session_line(s, active_id=active_id, bg_ids=bg_ids))
+            print(format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids))
         return
 
     # fzf 액션: delete / edit-title
