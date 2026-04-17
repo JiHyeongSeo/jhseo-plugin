@@ -737,8 +737,13 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
 
     state = _read_state()
-    slots: list[dict] = state.get("slots", [])
     bg_list: list[str] = state.get("background", [])
+
+    # 죽은 pane 자동 정리 (외부에서 Ctrl+C 등으로 pane이 종료된 경우)
+    live_pane_ids = _get_all_pane_ids(tmux_session)
+    slots: list[dict] = [s for s in state.get("slots", []) if s.get("pane_id", "") in live_pane_ids]
+    if slots != state.get("slots", []):
+        _write_state({"slots": slots, "background": bg_list})
 
     # 이미 슬롯에 열린 세션이면 포커스만 이동
     for slot in slots:
@@ -869,8 +874,13 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
     work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
 
     state = _read_state()
-    slots: list[dict] = state.get("slots", [])
     bg_list: list[str] = state.get("background", [])
+
+    # 죽은 pane 자동 정리
+    live_pane_ids = _get_all_pane_ids(tmux_session)
+    slots: list[dict] = [s for s in state.get("slots", []) if s.get("pane_id", "") in live_pane_ids]
+    if slots != state.get("slots", []):
+        _write_state({"slots": slots, "background": bg_list})
 
     # 슬롯 1개일 때만 동작
     if len(slots) != 1:
@@ -965,9 +975,14 @@ def tmux_new_session(sessions_cache_path: str) -> None:
 
     tmux_session = "claude-browser"
     state = _read_state()
-    slots: list[dict] = state.get("slots", [])
     bg_list: list[str] = state.get("background", [])
     right_width = _get_right_width(tmux_session)
+
+    # 죽은 pane 자동 정리
+    live_pane_ids = _get_all_pane_ids(tmux_session)
+    slots: list[dict] = [s for s in state.get("slots", []) if s.get("pane_id", "") in live_pane_ids]
+    if slots != state.get("slots", []):
+        _write_state({"slots": slots, "background": bg_list})
 
     target_idx = 0
     if len(slots) == 2:
