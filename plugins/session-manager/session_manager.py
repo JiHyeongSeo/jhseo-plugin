@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.4"
+VERSION = "2.0.7"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -770,6 +770,10 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
 
     session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
+        # cache stale (새 세션) → 디스크에서 새로 로드 후 재시도
+        sessions = load_all_sessions()
+        session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    if not session:
         return
 
     project_path = session.get("projectPath", "")
@@ -906,6 +910,10 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
         sessions = load_all_sessions()
 
     session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    if not session:
+        # cache stale (새 세션) → 디스크에서 새로 로드 후 재시도
+        sessions = load_all_sessions()
+        session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
         return
 
@@ -1096,7 +1104,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     for s in sessions:
         s["_searchContent"] = get_search_content(s)
 
-    lines = [format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids) for s in sessions]
+    lines = [" 정렬: 📅 날짜순"] + [format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids) for s in sessions]
     script_path = Path(__file__).resolve()
 
     if cache_file:
@@ -1139,6 +1147,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             "fzf",
             "--ansi", "--disabled", "--no-sort", "--layout=reverse", "--border",
             "--multi",
+            "--header-lines=1",
             "--prompt=세션 검색> ",
             f"--header={header}",
             "--color=hl:#ffaf00,hl+:#ffaf00",
@@ -1451,7 +1460,14 @@ def main() -> None:
         if sessions is None:
             sessions = load_all_sessions()
 
-        if args.sort == "project":
+        # sort 상태 파일 우선 (검색어 변경 reload 시에도 정렬 유지)
+        sort_mode = "date"
+        try:
+            sort_mode = Path("/tmp/claude-browser-sort.txt").read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+
+        if sort_mode == "project":
             sessions.sort(key=lambda s: (s.get("projectPath", ""), s.get("modified", "")))
         else:
             sessions.sort(key=lambda s: s.get("modified", ""), reverse=True)
@@ -1467,6 +1483,8 @@ def main() -> None:
             sessions = filter_sessions_by_query(sessions, query)
 
         slot_ids, bg_ids = get_tmux_open_sessions()
+        sort_label = "📁 프로젝트순" if sort_mode == "project" else "📅 날짜순"
+        print(f" 정렬: {sort_label}")
         for s in sessions:
             print(format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids))
         return
@@ -1508,6 +1526,8 @@ def main() -> None:
             sessions = filter_sessions_by_query(sessions, query)
 
         slot_ids, bg_ids = get_tmux_open_sessions()
+        sort_label = "📁 프로젝트순" if new_sort == "project" else "📅 날짜순"
+        print(f" 정렬: {sort_label}")
         for s in sessions:
             print(format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids))
         return
@@ -1538,6 +1558,12 @@ def main() -> None:
                 session_ids = [fzf_arg] if fzf_arg else []
 
             targets = [s for s in cached if s.get("sessionId") in session_ids]
+            # cache stale → 디스크에서 재로드 후 재시도
+            if len(targets) < len(session_ids):
+                fresh = load_all_sessions()
+                cached_ids = {s.get("sessionId") for s in targets}
+                missing = [sid for sid in session_ids if sid not in cached_ids]
+                targets += [s for s in fresh if s.get("sessionId") in missing]
             if not targets:
                 sys.stderr.write("\n  세션을 찾을 수 없습니다.\n")
                 sys.stderr.flush()
