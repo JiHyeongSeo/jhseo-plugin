@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.4"
+VERSION = "2.0.5"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -770,6 +770,10 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
 
     session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
+        # cache stale (새 세션) → 디스크에서 새로 로드 후 재시도
+        sessions = load_all_sessions()
+        session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    if not session:
         return
 
     project_path = session.get("projectPath", "")
@@ -906,6 +910,10 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
         sessions = load_all_sessions()
 
     session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    if not session:
+        # cache stale (새 세션) → 디스크에서 새로 로드 후 재시도
+        sessions = load_all_sessions()
+        session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
         return
 
