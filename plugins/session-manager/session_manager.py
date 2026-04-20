@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.5"
+VERSION = "2.0.6"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -1546,6 +1546,12 @@ def main() -> None:
                 session_ids = [fzf_arg] if fzf_arg else []
 
             targets = [s for s in cached if s.get("sessionId") in session_ids]
+            # cache stale → 디스크에서 재로드 후 재시도
+            if len(targets) < len(session_ids):
+                fresh = load_all_sessions()
+                cached_ids = {s.get("sessionId") for s in targets}
+                missing = [sid for sid in session_ids if sid not in cached_ids]
+                targets += [s for s in fresh if s.get("sessionId") in missing]
             if not targets:
                 sys.stderr.write("\n  세션을 찾을 수 없습니다.\n")
                 sys.stderr.flush()
