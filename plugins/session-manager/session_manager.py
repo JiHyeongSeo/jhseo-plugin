@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.7"
+VERSION = "2.0.8"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -790,8 +790,10 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
         _write_state({"slots": slots, "background": bg_list})
 
     # 이미 슬롯에 열린 세션이면 포커스만 이동
+    pane_title = get_display_summary(session)[:60]
     for slot in slots:
         if slot["session_id"] == session_id:
+            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"], "-T", pane_title])
             subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
             return
 
@@ -888,6 +890,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     if not new_pane_id:
         return
 
+    subprocess.run(["tmux", "select-pane", "-t", new_pane_id, "-T", pane_title])
     # slots에 새 슬롯 삽입 (위치 유지)
     slots.insert(target_idx, {"session_id": session_id, "pane_id": new_pane_id})
     _write_state({"slots": slots, "background": bg_list})
@@ -935,8 +938,10 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
         return
 
     # 이미 슬롯에 열린 세션이면 포커스만
+    pane_title = get_display_summary(session)[:60]
     for slot in slots:
         if slot["session_id"] == session_id:
+            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"], "-T", pane_title])
             subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
             return
 
@@ -961,6 +966,7 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
     if not new_pane_id:
         return
 
+    subprocess.run(["tmux", "select-pane", "-t", new_pane_id, "-T", pane_title])
     slots.append({"session_id": session_id, "pane_id": new_pane_id})
     _write_state({"slots": slots, "background": bg_list_new})
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
@@ -1259,6 +1265,12 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session])
     # 마우스 활성화: 스크롤 시 copy mode 진입 (claude 대화 내용 스크롤 가능)
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "mouse", "on"])
+    # pane 상단에 세션 제목 표시
+    subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
+    subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
+                    " #{pane_title} "])
+    # 왼쪽 fzf pane 타이틀
+    subprocess.run(["tmux", "select-pane", "-t", f"{tmux_session}:0.0", "-T", "cs"])
 
     # fzf 브라우저 실행 — 오류 시 메시지 표시 후 Enter 대기, 정상 종료 시 detach
     browser_cmd = (
