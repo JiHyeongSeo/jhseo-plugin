@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.8"
+VERSION = "2.0.9"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
@@ -793,7 +793,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     pane_title = get_display_summary(session)[:60]
     for slot in slots:
         if slot["session_id"] == session_id:
-            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"], "-T", pane_title])
+            subprocess.run(["tmux", "set-option", "-p", "-t", slot["pane_id"], "@cs_title", pane_title])
             subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
             return
 
@@ -890,7 +890,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     if not new_pane_id:
         return
 
-    subprocess.run(["tmux", "select-pane", "-t", new_pane_id, "-T", pane_title])
+    subprocess.run(["tmux", "set-option", "-p", "-t", new_pane_id, "@cs_title", pane_title])
     # slots에 새 슬롯 삽입 (위치 유지)
     slots.insert(target_idx, {"session_id": session_id, "pane_id": new_pane_id})
     _write_state({"slots": slots, "background": bg_list})
@@ -941,7 +941,7 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
     pane_title = get_display_summary(session)[:60]
     for slot in slots:
         if slot["session_id"] == session_id:
-            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"], "-T", pane_title])
+            subprocess.run(["tmux", "set-option", "-p", "-t", slot["pane_id"], "@cs_title", pane_title])
             subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
             return
 
@@ -966,7 +966,7 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
     if not new_pane_id:
         return
 
-    subprocess.run(["tmux", "select-pane", "-t", new_pane_id, "-T", pane_title])
+    subprocess.run(["tmux", "set-option", "-p", "-t", new_pane_id, "@cs_title", pane_title])
     slots.append({"session_id": session_id, "pane_id": new_pane_id})
     _write_state({"slots": slots, "background": bg_list_new})
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
@@ -1268,9 +1268,9 @@ def run_tmux_layout() -> None:
     # pane 상단에 세션 제목 표시
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
-                    " #{pane_title} "])
+                    " #{@cs_title} "])
     # 왼쪽 fzf pane 타이틀
-    subprocess.run(["tmux", "select-pane", "-t", f"{tmux_session}:0.0", "-T", "cs"])
+    subprocess.run(["tmux", "set-option", "-p", "-t", f"{tmux_session}:0.0", "@cs_title", "cs"])
 
     # fzf 브라우저 실행 — 오류 시 메시지 표시 후 Enter 대기, 정상 종료 시 detach
     browser_cmd = (
