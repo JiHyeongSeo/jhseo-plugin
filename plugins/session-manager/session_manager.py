@@ -399,12 +399,12 @@ def _get_active_pane_id(tmux_session: str) -> str:
     return r.stdout.strip()
 
 
-def fzf_select_target(sessions: list[dict], slot_ids: set[str]) -> str | None:
+def fzf_select_target(sessions: list[dict], open_ids: set[str]) -> str | None:
     """전체 세션 목록 fzf로 보여주고 선택된 session_id 반환. 취소 시 None."""
     lines = []
     for s in sessions:
         sid = s.get("sessionId", "")
-        indicator = "\x1b[32m[열림]\x1b[0m" if sid in slot_ids else "\x1b[90m[닫힘]\x1b[0m"
+        indicator = "\x1b[32m[열림]\x1b[0m" if sid in open_ids else "\x1b[90m[닫힘]\x1b[0m"
         date = s.get("modified", "")[:10]
         project = s.get("projectPath", "?").split("/")[-1]
         summary = get_display_summary(s)[:50]
@@ -420,7 +420,8 @@ def fzf_select_target(sessions: list[dict], slot_ids: set[str]) -> str | None:
             "--with-nth=1..-2",
         ],
         input="\n".join(lines),
-        capture_output=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
         text=True,
     )
 
@@ -446,8 +447,8 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
         sys.stderr.flush()
         return
 
-    slot_ids, _ = get_tmux_open_sessions()
-    target_id = fzf_select_target(sessions, slot_ids)
+    slot_ids, bg_ids = get_tmux_open_sessions()
+    target_id = fzf_select_target(sessions, slot_ids | bg_ids)
     if not target_id:
         return
 
@@ -457,7 +458,7 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
         return
 
     # 대상이 닫혀 있으면 먼저 오픈
-    if target_id not in slot_ids:
+    if target_id not in (slot_ids | bg_ids):
         sys.stderr.write("\n  대상 세션 오픈 중...\n")
         sys.stderr.flush()
         tmux_split_open(target_id, sessions_cache_path)
@@ -480,7 +481,14 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
 
     # tmux paste-buffer로 주입 (Enter 없음 — 사용자가 확인 후 전송)
     subprocess.run(["tmux", "load-buffer", "-"], input=formatted, text=True)
-    subprocess.run(["tmux", "paste-buffer", "-t", target_pane_id])
+    pb_result = subprocess.run(
+        ["tmux", "paste-buffer", "-t", target_pane_id],
+        capture_output=True,
+    )
+    if pb_result.returncode != 0:
+        sys.stderr.write("\n  주입 실패: pane이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.\n")
+        sys.stderr.flush()
+        return
 
     sys.stderr.write("\n  컨텍스트 주입 완료.\n")
     sys.stderr.flush()
