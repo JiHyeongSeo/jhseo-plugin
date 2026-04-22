@@ -59,6 +59,9 @@ def get_or_generate_summary(session: dict) -> str:
     full_path = session.get("fullPath", "")
     current_mtime: int = session.get("fileMtime", 0)
 
+    if not session_id:
+        return "(세션 ID 없음)"
+
     SUMMARY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_path = SUMMARY_CACHE_DIR / f"{session_id}.json"
 
@@ -99,6 +102,8 @@ def get_or_generate_summary(session: dict) -> str:
         return "(요약 생성 타임아웃 — 180초 초과)"
     except FileNotFoundError:
         return "(claude CLI를 찾을 수 없습니다)"
+    except OSError:
+        return "(요약 생성 실패: 시스템 오류)"
 
     try:
         cache_path.write_text(
