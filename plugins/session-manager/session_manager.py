@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -461,6 +462,7 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
         sys.stderr.write("\n  대상 세션 오픈 중...\n")
         sys.stderr.flush()
         tmux_split_open(target_id, sessions_cache_path)
+        time.sleep(0.3)  # tmux_split_open의 state 쓰기 완료 대기
 
     # 오픈 후 state 재조회
     state = _read_state()
@@ -479,7 +481,17 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
     formatted = f"[세션 참조: {title} / {date}]\n{summary}\n---"
 
     # tmux paste-buffer로 주입 (Enter 없음 — 사용자가 확인 후 전송)
-    subprocess.run(["tmux", "load-buffer", "-"], input=formatted, text=True)
+    lb_result = subprocess.run(
+        ["tmux", "load-buffer", "-"],
+        input=formatted,
+        text=True,
+        capture_output=True,
+    )
+    if lb_result.returncode != 0:
+        sys.stderr.write("\n  버퍼 로드 실패.\n")
+        sys.stderr.flush()
+        return
+
     pb_result = subprocess.run(
         ["tmux", "paste-buffer", "-t", target_pane_id],
         capture_output=True,
