@@ -420,7 +420,6 @@ def fzf_select_target(sessions: list[dict], open_ids: set[str]) -> str | None:
             "--with-nth=1..-2",
         ],
         input="\n".join(lines),
-        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         text=True,
     )
