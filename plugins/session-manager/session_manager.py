@@ -53,6 +53,64 @@ def extract_messages_for_summary(full_path: str, max_messages: int = 150) -> str
     return "\n\n".join(lines_out)
 
 
+def get_or_generate_summary(session: dict) -> str:
+    """세션 요약 반환. 캐시 유효하면 캐시, 아니면 claude -p로 생성 후 캐시 저장."""
+    session_id = session.get("sessionId", "")
+    full_path = session.get("fullPath", "")
+    current_mtime: int = session.get("fileMtime", 0)
+
+    SUMMARY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = SUMMARY_CACHE_DIR / f"{session_id}.json"
+
+    if cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            if cached.get("mtime") == current_mtime and cached.get("summary"):
+                return cached["summary"]
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    messages_text = extract_messages_for_summary(full_path)
+    if not messages_text:
+        return "(대화 내용 없음)"
+
+    prompt = (
+        "다음 Claude 대화 세션을 compact 요약해줘.\n"
+        "포함할 것: 작업 목표, 주요 결정사항, 완료된 작업, 현재 상태, "
+        "중요한 코드/설정/파일 경로.\n"
+        "다음 세션에서 이 요약만 보고 바로 작업을 이어갈 수 있을 정도로 상세하게.\n\n"
+        f"{messages_text}"
+    )
+
+    sys.stderr.write("  요약 생성 중 (claude -p)...\n")
+    sys.stderr.flush()
+
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        summary = result.stdout.strip()
+        if not summary:
+            return f"(요약 생성 실패: {result.stderr[:200]})"
+    except subprocess.TimeoutExpired:
+        return "(요약 생성 타임아웃 — 180초 초과)"
+    except FileNotFoundError:
+        return "(claude CLI를 찾을 수 없습니다)"
+
+    try:
+        cache_path.write_text(
+            json.dumps({"mtime": current_mtime, "summary": summary}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+    return summary
+
+
 def parse_jsonl_session(jsonl_path: Path) -> dict | None:
     """sessions-index.json 없는 프로젝트의 .jsonl 파일에서 세션 메타데이터 추출."""
     try:
