@@ -7,13 +7,114 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.0.9"
+VERSION = "2.1.0"
+SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
+
+
+def extract_messages_for_summary(full_path: str, max_messages: int = 150) -> str:
+    """JSONL에서 user/assistant 메시지를 추출해 요약용 텍스트 반환."""
+    lines_out: list[str] = []
+    count = 0
+    try:
+        raw = Path(full_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    for line in raw.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        rtype = record.get("type", "")
+        if rtype not in ("user", "assistant"):
+            continue
+        content = record.get("message", {}).get("content", [])
+        text = ""
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text = part.get("text", "")
+                    break
+        elif isinstance(content, str):
+            text = content
+        text = text.strip()
+        if not text or "Caveat:" in text[:50]:
+            continue
+        prefix = "사용자" if rtype == "user" else "Claude"
+        lines_out.append(f"{prefix}: {text[:500]}")
+        count += 1
+        if count >= max_messages:
+            break
+    return "\n\n".join(lines_out)
+
+
+def get_or_generate_summary(session: dict) -> str:
+    """세션 요약 반환. 캐시 유효하면 캐시, 아니면 claude -p로 생성 후 캐시 저장."""
+    session_id = session.get("sessionId", "")
+    full_path = session.get("fullPath", "")
+    current_mtime: int = session.get("fileMtime", 0)
+
+    if not session_id:
+        return "(세션 ID 없음)"
+
+    SUMMARY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = SUMMARY_CACHE_DIR / f"{session_id}.json"
+
+    if cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            if cached.get("mtime") == current_mtime and cached.get("summary"):
+                return cached["summary"]
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    messages_text = extract_messages_for_summary(full_path)
+    if not messages_text:
+        return "(대화 내용 없음)"
+
+    prompt = (
+        "다음 Claude 대화 세션을 compact 요약해줘.\n"
+        "포함할 것: 작업 목표, 주요 결정사항, 완료된 작업, 현재 상태, "
+        "중요한 코드/설정/파일 경로.\n"
+        "다음 세션에서 이 요약만 보고 바로 작업을 이어갈 수 있을 정도로 상세하게.\n\n"
+        f"{messages_text}"
+    )
+
+    sys.stderr.write("  요약 생성 중 (claude -p)...\n")
+    sys.stderr.flush()
+
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        summary = result.stdout.strip()
+        if not summary:
+            return f"(요약 생성 실패: {result.stderr[:200]})"
+    except subprocess.TimeoutExpired:
+        return "(요약 생성 타임아웃 — 180초 초과)"
+    except FileNotFoundError:
+        return "(claude CLI를 찾을 수 없습니다)"
+    except OSError:
+        return "(요약 생성 실패: 시스템 오류)"
+
+    try:
+        cache_path.write_text(
+            json.dumps({"mtime": current_mtime, "summary": summary}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+    return summary
 
 
 def parse_jsonl_session(jsonl_path: Path) -> dict | None:
@@ -297,6 +398,111 @@ def _get_active_pane_id(tmux_session: str) -> str:
         capture_output=True, text=True,
     )
     return r.stdout.strip()
+
+
+def fzf_select_target(sessions: list[dict], open_ids: set[str]) -> str | None:
+    """전체 세션 목록 fzf로 보여주고 선택된 session_id 반환. 취소 시 None."""
+    lines = []
+    for s in sessions:
+        sid = s.get("sessionId", "")
+        indicator = "\x1b[32m[열림]\x1b[0m" if sid in open_ids else "\x1b[90m[닫힘]\x1b[0m"
+        date = s.get("modified", "")[:10]
+        project = s.get("projectPath", "?").split("/")[-1]
+        summary = get_display_summary(s)[:50]
+        lines.append(f"{indicator} {date}  {project:<20}  {summary}  {sid}")
+
+    result = subprocess.run(
+        [
+            "fzf",
+            "--ansi",
+            "--layout=reverse",
+            "--prompt=주입할 세션 선택> ",
+            "--header=Enter:선택  Esc:취소",
+            "--with-nth=1..-2",
+        ],
+        input="\n".join(lines),
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout.strip().split()[-1]
+
+
+def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None:
+    """Ctrl+M: 소스 세션 compact 요약을 대상 Claude pane에 주입."""
+    sessions: list[dict] = []
+    if sessions_cache_path:
+        try:
+            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not sessions:
+        sessions = load_all_sessions()
+
+    source = next((s for s in sessions if s.get("sessionId") == source_session_id), None)
+    if not source:
+        sys.stderr.write("\n  소스 세션을 찾을 수 없습니다.\n")
+        sys.stderr.flush()
+        return
+
+    slot_ids, bg_ids = get_tmux_open_sessions()
+    target_id = fzf_select_target(sessions, slot_ids | bg_ids)
+    if not target_id:
+        return
+
+    if target_id == source_session_id:
+        sys.stderr.write("\n  소스와 대상이 동일합니다.\n")
+        sys.stderr.flush()
+        return
+
+    # 대상이 닫혀 있으면 먼저 오픈
+    if target_id not in (slot_ids | bg_ids):
+        sys.stderr.write("\n  대상 세션 오픈 중...\n")
+        sys.stderr.flush()
+        tmux_split_open(target_id, sessions_cache_path)
+        time.sleep(0.3)  # tmux_split_open의 state 쓰기 완료 대기
+
+    # 오픈 후 state 재조회
+    state = _read_state()
+    slots = state.get("slots", [])
+    target_slot = next((sl for sl in slots if sl.get("session_id") == target_id), None)
+    if not target_slot:
+        sys.stderr.write("\n  대상 pane을 찾을 수 없습니다.\n")
+        sys.stderr.flush()
+        return
+
+    target_pane_id = target_slot["pane_id"]
+
+    summary = get_or_generate_summary(source)
+    title = get_display_summary(source)
+    date = source.get("modified", "")[:10]
+    formatted = f"[세션 참조: {title} / {date}]\n{summary}\n---"
+
+    # tmux paste-buffer로 주입 (Enter 없음 — 사용자가 확인 후 전송)
+    lb_result = subprocess.run(
+        ["tmux", "load-buffer", "-"],
+        input=formatted,
+        text=True,
+        capture_output=True,
+    )
+    if lb_result.returncode != 0:
+        sys.stderr.write("\n  버퍼 로드 실패.\n")
+        sys.stderr.flush()
+        return
+
+    pb_result = subprocess.run(
+        ["tmux", "paste-buffer", "-t", target_pane_id],
+        capture_output=True,
+    )
+    if pb_result.returncode != 0:
+        sys.stderr.write("\n  주입 실패: pane이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.\n")
+        sys.stderr.flush()
+        return
+
+    sys.stderr.write("\n  컨텍스트 주입 완료.\n")
+    sys.stderr.flush()
 
 
 def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
@@ -1123,7 +1329,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
 
     header = (
         "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
-        "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  Ctrl-Z:detach  Ctrl-Q:종료"
+        "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  "
+        "Ctrl-X:컨텍스트주입  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -1209,6 +1416,13 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             ),
             # ctrl-r: 정렬 토글 (date ↔ project)
             f"--bind=ctrl-r:reload({_toggle_sort})",
+            # ctrl-x: 소스 세션 요약을 대상 pane에 주입
+            (
+                f"--bind=ctrl-x:execute("
+                f"python3 {script_path} --fzf-inject-context {{-1}}"
+                f" --sessions-cache {cache_file})"
+                f"+reload({_reload_with_cache})"
+            ),
         ],
         input="\n".join(lines),
         text=True,
@@ -1399,6 +1613,7 @@ def main() -> None:
     parser.add_argument("--fzf-toggle-sort", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--sort", choices=["date", "project"], default="date", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-action", nargs="+", metavar=("ACTION", "SESSION_ID"), help=argparse.SUPPRESS)
+    parser.add_argument("--fzf-inject-context", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--highlight", nargs="*", default=[], help=argparse.SUPPRESS)
     parser.add_argument("--query-file", metavar="PATH", help=argparse.SUPPRESS)
     # tmux 내부 실행용
@@ -1542,6 +1757,10 @@ def main() -> None:
         print(f" 정렬: {sort_label}")
         for s in sessions:
             print(format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids))
+        return
+
+    if args.fzf_inject_context:
+        fzf_inject_context(args.fzf_inject_context, args.sessions_cache or "")
         return
 
     # fzf 액션: delete / edit-title
