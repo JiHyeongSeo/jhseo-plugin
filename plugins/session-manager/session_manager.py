@@ -1329,7 +1329,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
 
     header = (
         "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
-        "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  Ctrl-Z:detach  Ctrl-Q:종료"
+        "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  "
+        "Ctrl-M:컨텍스트주입  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -1415,6 +1416,13 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             ),
             # ctrl-r: 정렬 토글 (date ↔ project)
             f"--bind=ctrl-r:reload({_toggle_sort})",
+            # ctrl-m: 소스 세션 요약을 대상 pane에 주입
+            (
+                f"--bind=ctrl-m:execute("
+                f"python3 {script_path} --fzf-inject-context {{-1}}"
+                f" --sessions-cache {cache_file})"
+                f"+reload({_reload_with_cache})"
+            ),
         ],
         input="\n".join(lines),
         text=True,
@@ -1605,6 +1613,7 @@ def main() -> None:
     parser.add_argument("--fzf-toggle-sort", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--sort", choices=["date", "project"], default="date", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-action", nargs="+", metavar=("ACTION", "SESSION_ID"), help=argparse.SUPPRESS)
+    parser.add_argument("--fzf-inject-context", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--highlight", nargs="*", default=[], help=argparse.SUPPRESS)
     parser.add_argument("--query-file", metavar="PATH", help=argparse.SUPPRESS)
     # tmux 내부 실행용
@@ -1748,6 +1757,10 @@ def main() -> None:
         print(f" 정렬: {sort_label}")
         for s in sessions:
             print(format_session_line(s, slot_ids=slot_ids, bg_ids=bg_ids))
+        return
+
+    if args.fzf_inject_context:
+        fzf_inject_context(args.fzf_inject_context, args.sessions_cache or "")
         return
 
     # fzf 액션: delete / edit-title
