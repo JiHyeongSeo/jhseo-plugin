@@ -399,6 +399,93 @@ def _get_active_pane_id(tmux_session: str) -> str:
     return r.stdout.strip()
 
 
+def fzf_select_target(sessions: list[dict], slot_ids: set[str]) -> str | None:
+    """전체 세션 목록 fzf로 보여주고 선택된 session_id 반환. 취소 시 None."""
+    lines = []
+    for s in sessions:
+        sid = s.get("sessionId", "")
+        indicator = "\x1b[32m[열림]\x1b[0m" if sid in slot_ids else "\x1b[90m[닫힘]\x1b[0m"
+        date = s.get("modified", "")[:10]
+        project = s.get("projectPath", "?").split("/")[-1]
+        summary = get_display_summary(s)[:50]
+        lines.append(f"{indicator} {date}  {project:<20}  {summary}  {sid}")
+
+    result = subprocess.run(
+        [
+            "fzf",
+            "--ansi",
+            "--layout=reverse",
+            "--prompt=주입할 세션 선택> ",
+            "--header=Enter:선택  Esc:취소",
+            "--with-nth=1..-2",
+        ],
+        input="\n".join(lines),
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout.strip().split()[-1]
+
+
+def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None:
+    """Ctrl+M: 소스 세션 compact 요약을 대상 Claude pane에 주입."""
+    sessions: list[dict] = []
+    if sessions_cache_path:
+        try:
+            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not sessions:
+        sessions = load_all_sessions()
+
+    source = next((s for s in sessions if s.get("sessionId") == source_session_id), None)
+    if not source:
+        sys.stderr.write("\n  소스 세션을 찾을 수 없습니다.\n")
+        sys.stderr.flush()
+        return
+
+    slot_ids, _ = get_tmux_open_sessions()
+    target_id = fzf_select_target(sessions, slot_ids)
+    if not target_id:
+        return
+
+    if target_id == source_session_id:
+        sys.stderr.write("\n  소스와 대상이 동일합니다.\n")
+        sys.stderr.flush()
+        return
+
+    # 대상이 닫혀 있으면 먼저 오픈
+    if target_id not in slot_ids:
+        sys.stderr.write("\n  대상 세션 오픈 중...\n")
+        sys.stderr.flush()
+        tmux_split_open(target_id, sessions_cache_path)
+
+    # 오픈 후 state 재조회
+    state = _read_state()
+    slots = state.get("slots", [])
+    target_slot = next((sl for sl in slots if sl.get("session_id") == target_id), None)
+    if not target_slot:
+        sys.stderr.write("\n  대상 pane을 찾을 수 없습니다.\n")
+        sys.stderr.flush()
+        return
+
+    target_pane_id = target_slot["pane_id"]
+
+    summary = get_or_generate_summary(source)
+    title = get_display_summary(source)
+    date = source.get("modified", "")[:10]
+    formatted = f"[세션 참조: {title} / {date}]\n{summary}\n---"
+
+    # tmux paste-buffer로 주입 (Enter 없음 — 사용자가 확인 후 전송)
+    subprocess.run(["tmux", "load-buffer", "-"], input=formatted, text=True)
+    subprocess.run(["tmux", "paste-buffer", "-t", target_pane_id])
+
+    sys.stderr.write("\n  컨텍스트 주입 완료.\n")
+    sys.stderr.flush()
+
+
 def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
     """상태 파일 + tmux 실제 상태로 열린 세션 목록 반환.
 
