@@ -1330,7 +1330,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     header = (
         "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
         "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  "
-        "Ctrl-M:컨텍스트주입  Ctrl-Z:detach  Ctrl-Q:종료"
+        "Ctrl-X:컨텍스트주입  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -1416,9 +1416,9 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             ),
             # ctrl-r: 정렬 토글 (date ↔ project)
             f"--bind=ctrl-r:reload({_toggle_sort})",
-            # ctrl-m: 소스 세션 요약을 대상 pane에 주입
+            # ctrl-x: 소스 세션 요약을 대상 pane에 주입
             (
-                f"--bind=ctrl-m:execute("
+                f"--bind=ctrl-x:execute("
                 f"python3 {script_path} --fzf-inject-context {{-1}}"
                 f" --sessions-cache {cache_file})"
                 f"+reload({_reload_with_cache})"
