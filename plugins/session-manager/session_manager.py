@@ -11,9 +11,46 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 VERSION = "2.0.9"
+SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
+
+
+def extract_messages_for_summary(full_path: str, max_messages: int = 150) -> str:
+    """JSONL에서 user/assistant 메시지를 추출해 요약용 텍스트 반환."""
+    lines_out: list[str] = []
+    count = 0
+    try:
+        raw = Path(full_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    for line in raw.splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        rtype = record.get("type", "")
+        if rtype not in ("user", "assistant"):
+            continue
+        content = record.get("message", {}).get("content", [])
+        text = ""
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text = part.get("text", "")
+                    break
+        elif isinstance(content, str):
+            text = content
+        text = text.strip()
+        if not text or "Caveat:" in text[:50]:
+            continue
+        prefix = "사용자" if rtype == "user" else "Claude"
+        lines_out.append(f"{prefix}: {text[:500]}")
+        count += 1
+        if count >= max_messages:
+            break
+    return "\n\n".join(lines_out)
 
 
 def parse_jsonl_session(jsonl_path: Path) -> dict | None:
