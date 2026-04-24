@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.1.0"
+VERSION = "2.1.1"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -432,23 +432,27 @@ def fzf_select_target(sessions: list[dict], open_ids: set[str]) -> str | None:
 
 def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None:
     """Ctrl+M: 소스 세션 compact 요약을 대상 Claude pane에 주입."""
-    sessions: list[dict] = []
+    # 소스: 캐시에서 빠르게 조회 (메인 fzf에서 하이라이트된 세션이므로 캐시에 존재)
+    cached: list[dict] = []
     if sessions_cache_path:
         try:
-            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+            cached = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             pass
-    if not sessions:
-        sessions = load_all_sessions()
 
-    source = next((s for s in sessions if s.get("sessionId") == source_session_id), None)
+    source = next((s for s in cached if s.get("sessionId") == source_session_id), None)
+
+    # 대상 선택: 항상 최신 스캔 (캐시 이후 생긴 세션도 표시)
+    fresh = load_all_sessions()
+    if not source:
+        source = next((s for s in fresh if s.get("sessionId") == source_session_id), None)
     if not source:
         sys.stderr.write("\n  소스 세션을 찾을 수 없습니다.\n")
         sys.stderr.flush()
         return
 
     slot_ids, bg_ids = get_tmux_open_sessions()
-    target_id = fzf_select_target(sessions, slot_ids | bg_ids)
+    target_id = fzf_select_target(fresh, slot_ids | bg_ids)
     if not target_id:
         return
 
