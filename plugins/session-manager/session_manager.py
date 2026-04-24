@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.1.1"
+VERSION = "2.1.2"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -507,6 +507,74 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
 
     sys.stderr.write("\n  컨텍스트 주입 완료.\n")
     sys.stderr.flush()
+
+
+def fzf_open_file() -> None:
+    """Ctrl+F: 홈 디렉터리에서 파일 검색 후 $EDITOR로 좌우 분할 새 pane에서 열기."""
+    home = str(Path.home())
+
+    # 파일 목록: fd 우선, 없으면 find
+    if shutil.which("fd"):
+        find_result = subprocess.run(
+            ["fd", "--hidden", "--type", "f", ".", home],
+            capture_output=True, text=True,
+        )
+    else:
+        find_result = subprocess.run(
+            ["find", home, "-type", "f"],
+            capture_output=True, text=True,
+        )
+
+    files = find_result.stdout.strip()
+    if not files:
+        sys.stderr.write("\n  파일을 찾을 수 없습니다.\n")
+        sys.stderr.flush()
+        return
+
+    # fzf로 파일 선택
+    fzf_result = subprocess.run(
+        ["fzf", "--ansi", "--layout=reverse",
+         "--prompt=파일 선택> ",
+         "--header=Enter:열기  Esc:취소",
+         "--preview=cat -- {}"],
+        input=files,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+
+    if fzf_result.returncode != 0 or not fzf_result.stdout.strip():
+        return
+
+    file_path = fzf_result.stdout.strip()
+    editor = os.environ.get("EDITOR", "vi")
+    pane_title = Path(file_path).name
+
+    tmux_session = "claude-browser"
+    state = _read_state()
+    slots = state.get("slots", [])
+
+    if slots:
+        # 마지막 슬롯 오른쪽으로 좌우 분할
+        ref_pane_id = slots[-1]["pane_id"]
+        subprocess.run([
+            "tmux", "split-window", "-h",
+            "-t", ref_pane_id,
+            editor, file_path,
+        ])
+    else:
+        # 슬롯 없음 → fzf pane 오른쪽으로 좌우 분할
+        fzf_pane = _get_fzf_pane_id(tmux_session)
+        right_width = _get_right_width(tmux_session)
+        subprocess.run([
+            "tmux", "split-window", "-h", "-l", str(right_width),
+            "-t", fzf_pane,
+            editor, file_path,
+        ])
+
+    new_pane_id = _get_active_pane_id(tmux_session)
+    if new_pane_id:
+        subprocess.run(["tmux", "set-option", "-p", "-t", new_pane_id, "@cs_title", pane_title])
+        subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
 
 
 def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
@@ -1334,7 +1402,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     header = (
         "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
         "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  "
-        "Ctrl-X:컨텍스트주입  Ctrl-Z:detach  Ctrl-Q:종료"
+        "Ctrl-X:컨텍스트주입  Ctrl-F:파일열기  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -1427,6 +1495,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
                 f" --sessions-cache {cache_file})"
                 f"+reload({_reload_with_cache})"
             ),
+            # ctrl-f: 파일 검색 후 $EDITOR로 좌우 분할 새 pane에서 열기
+            f"--bind=ctrl-f:execute(python3 {script_path} --fzf-open-file)",
         ],
         input="\n".join(lines),
         text=True,
@@ -1618,6 +1688,7 @@ def main() -> None:
     parser.add_argument("--sort", choices=["date", "project"], default="date", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-action", nargs="+", metavar=("ACTION", "SESSION_ID"), help=argparse.SUPPRESS)
     parser.add_argument("--fzf-inject-context", metavar="SESSION_ID", help=argparse.SUPPRESS)
+    parser.add_argument("--fzf-open-file", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--highlight", nargs="*", default=[], help=argparse.SUPPRESS)
     parser.add_argument("--query-file", metavar="PATH", help=argparse.SUPPRESS)
     # tmux 내부 실행용
@@ -1765,6 +1836,10 @@ def main() -> None:
 
     if args.fzf_inject_context:
         fzf_inject_context(args.fzf_inject_context, args.sessions_cache or "")
+        return
+
+    if args.fzf_open_file:
+        fzf_open_file()
         return
 
     # fzf 액션: delete / edit-title
