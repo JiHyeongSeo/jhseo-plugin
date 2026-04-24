@@ -513,15 +513,15 @@ def fzf_open_file() -> None:
     """Ctrl+F: 홈 디렉터리에서 파일 검색 후 $EDITOR로 좌우 분할 새 pane에서 열기."""
     home = str(Path.home())
 
-    # 파일 목록: fd 우선, 없으면 find
+    # 파일 목록: fd 우선, 없으면 find (숨김 폴더/파일 제외)
     if shutil.which("fd"):
         find_result = subprocess.run(
-            ["fd", "--hidden", "--type", "f", ".", home],
+            ["fd", "--type", "f", ".", home],
             capture_output=True, text=True,
         )
     else:
         find_result = subprocess.run(
-            ["find", home, "-type", "f"],
+            ["find", home, "-type", "f", "-not", "-path", "*/.*"],
             capture_output=True, text=True,
         )
 
@@ -535,8 +535,7 @@ def fzf_open_file() -> None:
     fzf_result = subprocess.run(
         ["fzf", "--ansi", "--layout=reverse",
          "--prompt=파일 선택> ",
-         "--header=Enter:열기  Esc:취소",
-         "--preview=cat -- {}"],
+         "--header=Enter:열기  Esc:취소"],
         input=files,
         stdout=subprocess.PIPE,
         text=True,
