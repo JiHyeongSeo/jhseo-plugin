@@ -39,7 +39,7 @@ def _calc_macd_signal(closes):
 
 def fetch(ticker: str) -> dict:
     tk = yf.Ticker(ticker)
-    hist = tk.history(period="6mo")
+    hist = tk.history(period="1y")
 
     if hist.empty:
         print(json.dumps({"error": f"No data for ticker: {ticker}"}), file=sys.stderr)
@@ -57,7 +57,7 @@ def fetch(ticker: str) -> dict:
     ma50 = _safe_float(closes.rolling(50).mean().iloc[-1])
     ma200 = _safe_float(closes.rolling(200).mean().iloc[-1])
     avg_vol = volumes.rolling(20).mean().iloc[-1]
-    vol_ratio = round(volumes.iloc[-1] / avg_vol, 2) if avg_vol else None
+    vol_ratio = _safe_float(volumes.iloc[-1] / avg_vol) if (avg_vol and not pd.isna(avg_vol)) else None
 
     info = tk.info
     market_cap_raw = info.get("marketCap")
@@ -69,7 +69,7 @@ def fetch(ticker: str) -> dict:
         market_cap = str(market_cap_raw) if market_cap_raw else "N/A"
 
     rev_growth = info.get("revenueGrowth")
-    rev_growth_str = f"{round(rev_growth * 100, 1)}%" if rev_growth else "N/A"
+    rev_growth_str = f"{round(rev_growth * 100, 1)}%" if rev_growth is not None else "N/A"
 
     news = tk.news or []
     headlines = [
