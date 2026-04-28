@@ -1,0 +1,16 @@
+{
+  "name": "trading-analyst",
+  "description": "미국 주식 다중 에이전트 분석. /analyze <TICKER>로 BUY/HOLD/SELL 결론 도출",
+  "version": "1.0.0",
+  "author": {
+    "name": "JiHyeong Seo"
+  },
+  "keywords": [
+    "trading",
+    "stock",
+    "analysis",
+    "finance",
+    "미국주식",
+    "주식분석"
+  ]
+}
