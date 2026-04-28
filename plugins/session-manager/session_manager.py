@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.1.2"
+VERSION = "2.1.3"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -203,6 +203,11 @@ def load_all_sessions() -> list[dict]:
             data = json.loads(index_file.read_text(encoding="utf-8"))
             entries = data.get("entries", [])
             for entry in entries:
+                # .jsonl 실제 존재 여부 검증: 인덱스가 stale 상태로 복원되어
+                # 삭제된 세션이 부활하는 현상 방지
+                full_path = entry.get("fullPath", "")
+                if full_path and not Path(full_path).exists():
+                    continue
                 sessions.append(entry)
                 indexed_ids.add(entry.get("sessionId", ""))
         except (json.JSONDecodeError, OSError):
