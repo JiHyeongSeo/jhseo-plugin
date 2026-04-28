@@ -3,6 +3,7 @@
 
 import sys
 import json
+import math
 import datetime
 import yfinance as yf
 import pandas as pd
@@ -11,7 +12,9 @@ import pandas as pd
 def _safe_float(val, default=None):
     try:
         v = float(val)
-        return None if pd.isna(v) else round(v, 2)
+        if pd.isna(v) or not math.isfinite(v):
+            return default
+        return round(v, 2)
     except (TypeError, ValueError):
         return default
 
@@ -20,7 +23,10 @@ def _calc_rsi(closes, period=14):
     delta = closes.diff()
     gain = delta.clip(lower=0).rolling(period).mean()
     loss = (-delta.clip(upper=0)).rolling(period).mean()
-    rs = gain / loss.replace(0, float("inf"))
+    last_loss = loss.iloc[-1]
+    if last_loss == 0:
+        return 100.0 if gain.iloc[-1] > 0 else 50.0
+    rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
     return _safe_float(rsi.iloc[-1], 50)
 

@@ -58,5 +58,6 @@ def test_invalid_ticker_exits_nonzero():
 
 def test_ticker_in_output_matches_input():
     result = run_fetch("MSFT")
+    assert result.returncode == 0, f"stderr: {result.stderr}"
     data = json.loads(result.stdout)
     assert data["ticker"] == "MSFT"
