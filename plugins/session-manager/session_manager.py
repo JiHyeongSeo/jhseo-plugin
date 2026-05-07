@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -220,6 +220,12 @@ def load_gemini_sessions() -> list[dict]:
         if not chats_dir.exists():
             continue
         project_path = name_to_path.get(proj_dir.name, "")
+        if not project_path:
+            history_root = GEMINI_DIR / "history" / proj_dir.name / ".project_root"
+            try:
+                project_path = history_root.read_text(encoding="utf-8").strip()
+            except OSError:
+                pass
         for chat_file in chats_dir.glob("session-*.json"):
             try:
                 data = json.loads(chat_file.read_text(encoding="utf-8"))
@@ -1550,19 +1556,19 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             f"--bind=start:reload(python3 {script_path} --fzf-list-lines --sessions-cache {cache_file})",
             # Tab: 다중 선택 후 아래로 이동
             "--bind=tab:toggle+down",
-            # Enter: 세션 열고 목록 reload (query 보존)
+            # Enter: 세션 열고 목록 reload (fresh: 새 세션·삭제 반영)
             (
                 f"--bind=enter:execute("
                 f"python3 {script_path} --tmux-split-open {{-1}}"
                 f" --sessions-cache {cache_file})"
-                f"+reload({_reload_with_cache})"
+                f"+reload({_reload_fresh})"
             ),
-            # ctrl-s: 슬롯 2 추가 (슬롯 1개일 때만 동작)
+            # ctrl-s: 슬롯 2 추가 (fresh)
             (
                 f"--bind=ctrl-s:execute("
                 f"python3 {script_path} --tmux-split-add {{-1}}"
                 f" --sessions-cache {cache_file})"
-                f"+reload({_reload_with_cache})"
+                f"+reload({_reload_fresh})"
             ),
             # ctrl-n: 새 Claude 세션 생성 (디렉터리 선택)
             (
@@ -1991,8 +1997,18 @@ def main() -> None:
                 label = f"{len(targets)}개 세션"
             confirm = _tty_input(f"\n  삭제: {label} (y/N) ").strip().lower()
             if confirm == "y":
+                deleted_ids = {t.get("sessionId") for t in targets}
                 for t in targets:
                     delete_session(t)
+                # 캐시 파일에서도 삭제 (stale 방지)
+                if args.sessions_cache:
+                    try:
+                        remaining = [s for s in cached if s.get("sessionId") not in deleted_ids]
+                        Path(args.sessions_cache).write_text(
+                            json.dumps(remaining, ensure_ascii=False), encoding="utf-8"
+                        )
+                    except OSError:
+                        pass
                 sys.stderr.write(f"  {len(targets)}개 삭제 완료.\n")
                 sys.stderr.flush()
             return
@@ -2010,6 +2026,17 @@ def main() -> None:
             new_title = _tty_input(f"\n  새 제목 (현재: {summary[:40]}): ").strip()
             if new_title:
                 save_title_override(fzf_session_id, new_title)
+                # 캐시 파일에서도 제목 갱신 (stale 방지)
+                if args.sessions_cache:
+                    try:
+                        for s in cached:
+                            if s.get("sessionId") == fzf_session_id:
+                                s["summary"] = new_title
+                        Path(args.sessions_cache).write_text(
+                            json.dumps(cached, ensure_ascii=False), encoding="utf-8"
+                        )
+                    except OSError:
+                        pass
                 sys.stderr.write(f"  저장됨: {new_title}\n")
                 sys.stderr.flush()
         return
