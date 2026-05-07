@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.2.2"
+VERSION = "2.2.3"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -194,8 +194,45 @@ def parse_jsonl_session(jsonl_path: Path) -> dict | None:
     }
 
 
+def _parse_gemini_chat_file(chat_file: Path) -> tuple[str, list[dict], str, str]:
+    """Gemini 세션 파일(.json/.jsonl) 파싱 → (sessionId, messages, startTime, lastUpdated)."""
+    raw = chat_file.read_text(encoding="utf-8")
+    session_id = chat_file.stem
+    messages: list[dict] = []
+    start_time = ""
+    last_updated = ""
+
+    if chat_file.suffix == ".jsonl":
+        # 새 형식: 첫 줄=메타데이터, 이후 줄=메시지 또는 $set
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "sessionId" in obj:
+                session_id = obj.get("sessionId", session_id)
+                start_time = obj.get("startTime", "")
+                last_updated = obj.get("lastUpdated", "")
+            elif "$set" in obj:
+                last_updated = obj["$set"].get("lastUpdated", last_updated)
+            elif "type" in obj:
+                messages.append(obj)
+    else:
+        # 구 형식: 단일 JSON 객체
+        data = json.loads(raw)
+        session_id = data.get("sessionId", session_id)
+        messages = data.get("messages", [])
+        start_time = data.get("startTime", "")
+        last_updated = data.get("lastUpdated", "")
+
+    return session_id, messages, start_time, last_updated
+
+
 def load_gemini_sessions() -> list[dict]:
-    """~/.gemini/tmp/*/chats/session-*.json 에서 Gemini 세션 로드."""
+    """~/.gemini/tmp/*/chats/session-*.{json,jsonl} 에서 Gemini 세션 로드."""
     if not shutil.which("gemini"):
         return []
     tmp_dir = GEMINI_DIR / "tmp"
@@ -226,11 +263,16 @@ def load_gemini_sessions() -> list[dict]:
                 project_path = history_root.read_text(encoding="utf-8").strip()
             except OSError:
                 pass
-        for chat_file in chats_dir.glob("session-*.json"):
+
+        # .json(구) 와 .jsonl(신) 모두 처리
+        chat_files = list(chats_dir.glob("session-*.json")) + list(chats_dir.glob("session-*.jsonl"))
+        seen: set[str] = set()
+        for chat_file in chat_files:
             try:
-                data = json.loads(chat_file.read_text(encoding="utf-8"))
-                session_id = data.get("sessionId", chat_file.stem)
-                messages = data.get("messages", [])
+                session_id, messages, start_time, last_updated = _parse_gemini_chat_file(chat_file)
+                if session_id in seen:
+                    continue
+                seen.add(session_id)
                 first_prompt = ""
                 for msg in messages:
                     if msg.get("type") == "user":
@@ -252,8 +294,8 @@ def load_gemini_sessions() -> list[dict]:
                     "summary": summary,
                     "firstPrompt": first_prompt,
                     "messageCount": len(messages),
-                    "created": data.get("startTime", ""),
-                    "modified": data.get("lastUpdated", ""),
+                    "created": start_time,
+                    "modified": last_updated,
                     "gitBranch": "",
                 })
             except (OSError, json.JSONDecodeError):
