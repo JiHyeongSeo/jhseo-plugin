@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.2.1"
+VERSION = "2.2.2"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1479,10 +1479,19 @@ def tmux_new_session(sessions_cache_path: str) -> None:
     if not new_pane_id:
         return
 
-    # session_id는 빈 문자열 — claude 시작 후 자체적으로 세션 생성
+    # session_id는 빈 문자열 — 툴이 자체적으로 세션 생성
     slots.insert(target_idx, {"session_id": "", "pane_id": new_pane_id})
     _write_state({"slots": slots, "background": bg_list})
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
+
+    # Gemini: 세션 파일 생성까지 대기 (최대 5초 폴링)
+    if selected_tool == "gemini":
+        chats_before = set(GEMINI_DIR.glob("tmp/*/chats/session-*.json"))
+        for _ in range(10):
+            time.sleep(0.5)
+            chats_after = set(GEMINI_DIR.glob("tmp/*/chats/session-*.json"))
+            if chats_after - chats_before:
+                break
 
 
 def run_fzf_tmux(cache_file: str, query_file: str) -> None:
