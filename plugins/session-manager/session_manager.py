@@ -11,11 +11,12 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.1.3"
+VERSION = "2.2.0"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
+GEMINI_DIR = Path.home() / ".gemini"
 
 
 def extract_messages_for_summary(full_path: str, max_messages: int = 150) -> str:
@@ -193,6 +194,67 @@ def parse_jsonl_session(jsonl_path: Path) -> dict | None:
     }
 
 
+def load_gemini_sessions() -> list[dict]:
+    """~/.gemini/tmp/*/chats/session-*.json 에서 Gemini 세션 로드."""
+    if not shutil.which("gemini"):
+        return []
+    tmp_dir = GEMINI_DIR / "tmp"
+    if not tmp_dir.exists():
+        return []
+
+    projects_file = GEMINI_DIR / "projects.json"
+    name_to_path: dict[str, str] = {}
+    try:
+        data = json.loads(projects_file.read_text(encoding="utf-8"))
+        for path, name in data.get("projects", {}).items():
+            name_to_path[name] = path
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    overrides = load_title_overrides()
+    sessions = []
+    for proj_dir in tmp_dir.iterdir():
+        if not proj_dir.is_dir():
+            continue
+        chats_dir = proj_dir / "chats"
+        if not chats_dir.exists():
+            continue
+        project_path = name_to_path.get(proj_dir.name, "")
+        for chat_file in chats_dir.glob("session-*.json"):
+            try:
+                data = json.loads(chat_file.read_text(encoding="utf-8"))
+                session_id = data.get("sessionId", chat_file.stem)
+                messages = data.get("messages", [])
+                first_prompt = ""
+                for msg in messages:
+                    if msg.get("type") == "user":
+                        content = msg.get("content", [])
+                        if isinstance(content, list):
+                            for c in content:
+                                if isinstance(c, dict) and "text" in c:
+                                    first_prompt = c["text"][:200]
+                                    break
+                        elif isinstance(content, str):
+                            first_prompt = content[:200]
+                        break
+                summary = overrides.get(session_id) or first_prompt[:60] or "Gemini session"
+                sessions.append({
+                    "sessionId": session_id,
+                    "tool": "gemini",
+                    "projectPath": project_path,
+                    "fullPath": str(chat_file),
+                    "summary": summary,
+                    "firstPrompt": first_prompt,
+                    "messageCount": len(messages),
+                    "created": data.get("startTime", ""),
+                    "modified": data.get("lastUpdated", ""),
+                    "gitBranch": "",
+                })
+            except (OSError, json.JSONDecodeError):
+                pass
+    return sessions
+
+
 def load_all_sessions() -> list[dict]:
     """~/.claude/projects/ 아래 모든 세션을 반환."""
     sessions = []
@@ -231,6 +293,7 @@ def load_all_sessions() -> list[dict]:
             if sid in overrides:
                 s["summary"] = overrides[sid]
 
+    sessions += load_gemini_sessions()
     return sessions
 
 
@@ -632,7 +695,9 @@ def format_session_line(
     else:
         indicator = "  "
 
-    display = f"{indicator}{date}  {project:<20}  {summary:<60}  [{branch}] {msgs}msgs"
+    tool = session.get("tool", "claude")
+    tool_badge = "\x1b[34m[G]\x1b[0m" if tool == "gemini" else "\x1b[36m[C]\x1b[0m"
+    display = f"{indicator}{tool_badge} {date}  {project:<20}  {summary:<60}  [{branch}] {msgs}msgs"
     return f"{display}  {session_id}"
 
 
@@ -693,6 +758,14 @@ def format_stats(sessions: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _resume_cmd(session: dict) -> str:
+    """세션의 툴에 맞는 resume 커맨드 반환."""
+    session_id = session.get("sessionId", "")
+    if session.get("tool") == "gemini":
+        return f"gemini --resume {session_id}"
+    return f"claude --resume {session_id}"
+
+
 def delete_session(session: dict) -> None:
     full_path = Path(session.get("fullPath", ""))
     session_id = session.get("sessionId", "")
@@ -702,6 +775,9 @@ def delete_session(session: dict) -> None:
             full_path.unlink()
     except OSError:
         pass
+
+    if session.get("tool") == "gemini":
+        return
 
     index_path = full_path.parent / "sessions-index.json"
     try:
@@ -1131,7 +1207,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
             subprocess.run([
                 "tmux", "split-window", "-h", "-l", str(right_width),
                 "-t", fzf_pane, "-c", work_dir,
-                f"claude --resume {session_id}",
+                _resume_cmd(session),
             ])
             new_pane_id = _get_active_pane_id(tmux_session)
 
@@ -1148,7 +1224,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
             subprocess.run([
                 "tmux", "split-window", "-v", "-b",
                 "-t", ref_pane_id, "-c", work_dir,
-                f"claude --resume {session_id}",
+                _resume_cmd(session),
             ])
         new_pane_id = _get_active_pane_id(tmux_session)
 
@@ -1165,7 +1241,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
             subprocess.run([
                 "tmux", "split-window", "-v",
                 "-t", ref_pane_id, "-c", work_dir,
-                f"claude --resume {session_id}",
+                _resume_cmd(session),
             ])
         new_pane_id = _get_active_pane_id(tmux_session)
 
@@ -1309,6 +1385,32 @@ def tmux_new_session(sessions_cache_path: str) -> None:
     if not selected_dir or not Path(selected_dir).is_dir():
         return
 
+    # 툴 선택: 설치된 것만 표시
+    available_tools = []
+    if shutil.which("claude"):
+        available_tools.append("Claude  (claude)")
+    if shutil.which("gemini"):
+        available_tools.append("Gemini  (gemini)")
+    if shutil.which("codex"):
+        available_tools.append("Codex   (codex)")
+
+    selected_tool = "claude"
+    if len(available_tools) > 1:
+        tool_result = subprocess.run(
+            ["fzf", "--prompt", "도구 선택: ",
+             "--height", "40%", "--reverse", "--border",
+             "--header", "Enter:선택  Esc:취소"],
+            input="\n".join(available_tools),
+            capture_output=True, text=True,
+        )
+        if tool_result.returncode != 0:
+            return
+        choice = tool_result.stdout.strip().lower()
+        if "gemini" in choice:
+            selected_tool = "gemini"
+        elif "codex" in choice:
+            selected_tool = "codex"
+
     tmux_session = "claude-browser"
     state = _read_state()
     bg_list: list[str] = state.get("background", [])
@@ -1350,21 +1452,21 @@ def tmux_new_session(sessions_cache_path: str) -> None:
         subprocess.run([
             "tmux", "split-window", "-h", "-l", str(right_width),
             "-t", fzf_pane, "-c", selected_dir,
-            "claude",
+            selected_tool,
         ])
     elif target_idx == 0:
         ref_pane_id = slots[0]["pane_id"]
         subprocess.run([
             "tmux", "split-window", "-v", "-b",
             "-t", ref_pane_id, "-c", selected_dir,
-            "claude",
+            selected_tool,
         ])
     else:
         ref_pane_id = slots[0]["pane_id"]
         subprocess.run([
             "tmux", "split-window", "-v",
             "-t", ref_pane_id, "-c", selected_dir,
-            "claude",
+            selected_tool,
         ])
 
     new_pane_id = _get_active_pane_id(tmux_session)
@@ -1966,13 +2068,12 @@ def main() -> None:
     selected = run_fzf(sessions)
     if selected:
         project_path = selected.get("projectPath", "")
-        session_id = selected.get("sessionId", "")
         summary = get_display_summary(selected)
         print(f"\n{'─' * 60}")
         print(f"  Resume: {summary[:55]}")
         print(f"  프로젝트: {project_path}")
         print(f"{'─' * 60}\n")
-        cmd = f'cd "{project_path}" && claude --resume {session_id}'
+        cmd = f'cd "{project_path}" && {_resume_cmd(selected)}'
         os.execlp("bash", "bash", "-c", cmd)
 
 
