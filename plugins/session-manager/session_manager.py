@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.2.3"
+VERSION = "2.2.4"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1365,7 +1365,7 @@ def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
         subprocess.run([
             "tmux", "split-window", "-v",
             "-t", slot0_pane_id, "-c", work_dir,
-            f"claude --resume {session_id}",
+            _resume_cmd(session),
         ])
 
     new_pane_id = _get_active_pane_id(tmux_session)
