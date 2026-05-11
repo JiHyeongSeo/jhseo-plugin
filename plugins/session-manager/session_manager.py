@@ -11,12 +11,14 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.2.4"
+VERSION = "2.3.1"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 TITLE_OVERRIDES_FILE = Path.home() / ".claude" / "session-manager-titles.json"
 GEMINI_DIR = Path.home() / ".gemini"
+DEBATE_STATE_FILE = Path.home() / ".claude" / "cs-debate-state.json"
+COLLAB_SESSIONS_FILE = Path.home() / ".claude" / "cs-collab-sessions.json"
 
 
 def extract_messages_for_summary(full_path: str, max_messages: int = 150) -> str:
@@ -342,6 +344,7 @@ def load_all_sessions() -> list[dict]:
                 s["summary"] = overrides[sid]
 
     sessions += load_gemini_sessions()
+    sessions += load_collab_sessions()
     return sessions
 
 
@@ -744,7 +747,12 @@ def format_session_line(
         indicator = "  "
 
     tool = session.get("tool", "claude")
-    tool_badge = "\x1b[34m[G]\x1b[0m" if tool == "gemini" else "\x1b[36m[C]\x1b[0m"
+    if tool == "collab":
+        tool_badge = "\x1b[35m[D]\x1b[0m"  # 보라색 [D]uo
+    elif tool == "gemini":
+        tool_badge = "\x1b[34m[G]\x1b[0m"
+    else:
+        tool_badge = "\x1b[36m[C]\x1b[0m"
     display = f"{indicator}{tool_badge} {date}  {project:<20}  {summary:<60}  [{branch}] {msgs}msgs"
     return f"{display}  {session_id}"
 
@@ -804,6 +812,51 @@ def format_stats(sessions: list[dict]) -> str:
             f"가장 활발한 프로젝트: {most_active[0]} ({len(most_active[1])}개 세션)"
         )
     return "\n".join(lines)
+
+
+def load_collab_sessions() -> list[dict]:
+    """cs-collab-sessions.json 에서 협업 페어 목록 로드."""
+    try:
+        data = json.loads(COLLAB_SESSIONS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def save_collab_session(entry: dict) -> None:
+    """협업 페어를 cs-collab-sessions.json 에 추가/갱신."""
+    sessions = load_collab_sessions()
+    cid = entry.get("sessionId", "")
+    sessions = [s for s in sessions if s.get("sessionId") != cid]
+    sessions.insert(0, entry)
+    try:
+        COLLAB_SESSIONS_FILE.write_text(
+            json.dumps(sessions, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def _read_debate_state() -> dict:
+    try:
+        return json.loads(DEBATE_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_debate_state(state: dict) -> None:
+    try:
+        DEBATE_STATE_FILE.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+
+
+
+
 
 
 def _resume_cmd(session: dict) -> str:
@@ -1033,6 +1086,33 @@ def install_cli() -> None:
         print(f'  ~/.zshrc 또는 ~/.bashrc에 추가: export PATH="$HOME/.local/bin:$PATH"')
 
     _check_and_install_deps()
+    _register_collab_mcp()
+
+
+def _register_collab_mcp() -> None:
+    """collab MCP 서버를 user scope로 자동 등록."""
+    mcp_script = Path(__file__).resolve().parent / "collab_mcp.py"
+    if not mcp_script.exists():
+        return
+
+    # 이미 등록됐는지 확인
+    result = subprocess.run(
+        ["claude", "mcp", "list"],
+        capture_output=True, text=True,
+    )
+    if "collab:" in result.stdout:
+        print("  [collab MCP] 이미 등록됨")
+        return
+
+    reg = subprocess.run(
+        ["claude", "mcp", "add", "--scope", "user", "collab",
+         "python3", str(mcp_script)],
+        capture_output=True, text=True,
+    )
+    if reg.returncode == 0:
+        print(f"  [collab MCP] 등록 완료: {mcp_script.name}")
+    else:
+        print(f"  [collab MCP] 등록 실패: {reg.stderr.strip()[:100]}")
 
 
 def format_session_preview(session: dict, highlight: str = "") -> str:
@@ -1157,6 +1237,76 @@ def _get_right_width(tmux_session: str) -> int:
         return 130
 
 
+def _open_collab_session(collab: dict) -> None:
+    """collab 페어 세션 Enter: 기존 슬롯 정리 후 Claude(상) + Gemini(하) resume."""
+    tmux_session = "claude-browser"
+    fzf_pane = _get_fzf_pane_id(tmux_session)
+    if not fzf_pane:
+        return
+
+    work_dir = collab.get("projectPath", str(Path.home()))
+    if not Path(work_dir).is_dir():
+        work_dir = str(Path.home())
+
+    claude_sid = collab.get("claudeSessionId", "")
+    gemini_sid = collab.get("geminiSessionId", "")
+
+    # 기존 슬롯 정리
+    state = _read_state()
+    bg_list: list[str] = state.get("background", [])
+    live_pane_ids = _get_all_pane_ids(tmux_session)
+    for slot in state.get("slots", []):
+        pane_id = slot.get("pane_id", "")
+        if pane_id not in live_pane_ids:
+            continue
+        old_sid = slot.get("session_id", "")
+        subprocess.run(["tmux", "break-pane", "-d", "-s", pane_id, "-n", old_sid or pane_id])
+        if old_pane_id := pane_id:
+            if old_pane_id in _get_all_pane_ids(tmux_session):
+                subprocess.run(["tmux", "kill-pane", "-t", old_pane_id], capture_output=True)
+                old_sid = ""
+        if old_sid and old_sid not in bg_list:
+            bg_list.append(old_sid)
+    _write_state({"slots": [], "background": bg_list})
+
+    width_result = subprocess.run(
+        ["tmux", "display-message", "-p", "#{window_width}"],
+        capture_output=True, text=True,
+    )
+    try:
+        right_w = int(int(width_result.stdout.strip()) * 0.7)
+    except ValueError:
+        right_w = 150
+
+    # Claude 패널 (resume 또는 새 세션)
+    claude_cmd = f"claude --resume {claude_sid}" if claude_sid else "claude"
+    subprocess.run([
+        "tmux", "split-window", "-h", "-l", str(right_w),
+        "-t", fzf_pane, "-c", work_dir, claude_cmd,
+    ])
+    claude_pane = _get_active_pane_id(tmux_session)
+
+    # Gemini 패널 (resume 또는 새 세션)
+    gemini_cmd = f"gemini --resume {gemini_sid}" if gemini_sid else "gemini"
+    if claude_pane:
+        subprocess.run([
+            "tmux", "split-window", "-v",
+            "-t", claude_pane, "-c", work_dir, gemini_cmd,
+        ])
+    gemini_pane = _get_active_pane_id(tmux_session)
+
+    # debate state 갱신
+    old_state = _read_debate_state()
+    old_state.update({
+        "claude_pane": claude_pane or "",
+        "gemini_pane": gemini_pane or "",
+    })
+    _write_debate_state(old_state)
+
+    if claude_pane:
+        subprocess.run(["tmux", "select-pane", "-t", claude_pane])
+
+
 def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     """Enter: 선택한 세션을 슬롯에서 실행.
 
@@ -1180,6 +1330,11 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
         sessions = load_all_sessions()
         session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
+        return
+
+    # collab 페어 세션: 두 패널 동시 resume
+    if session.get("tool") == "collab":
+        _open_collab_session(session)
         return
 
     project_path = session.get("projectPath", "")
@@ -1565,7 +1720,6 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     header = (
         "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
         "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  "
-        "Ctrl-X:컨텍스트주입  Ctrl-F:파일열기  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
