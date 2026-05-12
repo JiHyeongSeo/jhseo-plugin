@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""claude-sessions: Claude Code session browser and manager"""
+"""cs: AI session browser — Claude/Gemini sessions, tmux multi-slot, collab_ask MCP"""
 
 import json
 import os
@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -603,6 +603,21 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
     date = source.get("modified", "")[:10]
     formatted = f"[세션 참조: {title} / {date}]\n{summary}\n---"
 
+    # 대상 패널이 Gemini(node)인지 확인
+    pane_cmd_result = subprocess.run(
+        ["tmux", "display-message", "-p", "-t", target_pane_id, "#{pane_current_command}"],
+        capture_output=True, text=True,
+    )
+    target_is_gemini = pane_cmd_result.stdout.strip() == "node"
+
+    # Gemini 대상: shell mode 방지를 위해 Escape 먼저 전송
+    if target_is_gemini:
+        subprocess.run(
+            ["tmux", "send-keys", "-t", target_pane_id, "Escape"],
+            capture_output=True,
+        )
+        time.sleep(0.3)
+
     # tmux paste-buffer로 주입 (Enter 없음 — 사용자가 확인 후 전송)
     lb_result = subprocess.run(
         ["tmux", "load-buffer", "-"],
@@ -630,6 +645,13 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
 
 def fzf_open_file() -> None:
     """Ctrl+F: 홈 디렉터리에서 파일 검색 후 $EDITOR로 좌우 분할 새 pane에서 열기."""
+    try:
+        _fzf_open_file_impl()
+    except KeyboardInterrupt:
+        pass
+
+
+def _fzf_open_file_impl() -> None:
     home = str(Path.home())
 
     # 파일 목록: fd 우선, 없으면 find (숨김 폴더/파일 제외)
@@ -1719,7 +1741,8 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
 
     header = (
         "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
-        "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글  "
+        "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글\n"
+        "Ctrl-X:컨텍스트주입  Ctrl-F:파일열기  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
