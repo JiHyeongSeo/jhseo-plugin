@@ -168,7 +168,7 @@ def tool_collab_ask(tool: str, message: str, keep_pane: bool = False, work_dir: 
         work_dir = str(Path.cwd())
 
     if tool == "gemini":
-        cmd = ["gemini", "-p", message]
+        cmd = ["gemini", "-p", message, "-o", "text"]
     else:
         cmd = ["claude", "-p", message]
 
