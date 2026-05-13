@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.4.3"
+VERSION = "2.4.5"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -355,19 +355,6 @@ def group_by_project(sessions: list[dict]) -> dict[str, list[dict]]:
     return dict(sorted(groups.items()))
 
 
-def _highlight_text(text: str, query: str) -> str:
-    if not query:
-        return text
-    for term in query.split():
-        if not term:
-            continue
-        try:
-            pattern = re.compile(re.escape(term), re.IGNORECASE)
-            text = pattern.sub(lambda m: f"\x1b[1;33m{m.group(0)}\x1b[0m", text)
-        except re.error:
-            pass
-    return text
-
 
 def clean_summary(text: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text)
@@ -705,8 +692,6 @@ def format_session_line(
     date = session.get("modified", "")[:10]
     project = session.get("projectPath", "?").split("/")[-1]
     summary = get_display_summary(session)[:60]
-    branch = session.get("gitBranch", "")
-    msgs = session.get("messageCount", 0)
     session_id = session.get("sessionId", "")
 
     if slot_ids and session_id in slot_ids:
@@ -721,8 +706,9 @@ def format_session_line(
         tool_badge = "\x1b[34m[G]\x1b[0m"
     else:
         tool_badge = "\x1b[36m[C]\x1b[0m"
-    display = f"{indicator}{tool_badge} {date}  {project:<20}  {summary:<60}  [{branch}] {msgs}msgs"
-    return f"{display}  {session_id}"
+    display = f"{indicator}{tool_badge} {date}  {project:<20}  {summary:<60}"
+    # session_id는 Tab으로 분리 — fzf --with-nth=1 로 화면에서 숨김
+    return f"{display}\t{session_id}"
 
 
 def filter_sessions_by_query(sessions: list[dict], query: str) -> list[dict]:
@@ -1212,90 +1198,6 @@ def install_cli() -> None:
     _check_and_install_deps()
 
 
-def format_session_preview(session: dict, highlight: str = "") -> str:
-    query = highlight.strip()
-    query_terms = [t for t in query.split() if t] if query else []
-
-    full_path = Path(session.get("fullPath", ""))
-    header = [
-        f"프로젝트: {session.get('projectPath', '')}",
-        f"날짜:     {session.get('modified', '')[:10]}  |  메시지: {session.get('messageCount', 0)}개",
-        f"제목:     {get_display_summary(session)}",
-        "─" * 60,
-    ]
-    if query:
-        header = [_highlight_text(line, query) for line in header]
-
-    if not full_path.exists():
-        return "\n".join(header + ["[세션 파일 없음]"])
-
-    matched_msgs = []
-    other_msgs = []
-
-    SKILL_PATTERNS = (
-        "Base directory for this skill:",
-        "REQUIRED SUB-SKILL:",
-        "subagent_type",
-    )
-
-    try:
-        raw = full_path.read_text(encoding="utf-8", errors="replace")
-        for line in raw.splitlines():
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            rtype = record.get("type", "")
-            if rtype not in ("user", "assistant"):
-                continue
-
-            content = record.get("message", {}).get("content", [])
-            text = ""
-            if isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        text = part.get("text", "")
-                        break
-            elif isinstance(content, str):
-                text = content
-
-            text = clean_summary(text)
-            if not text or "Caveat:" in text[:50]:
-                continue
-            if any(pat in text for pat in SKILL_PATTERNS):
-                continue
-
-            prefix = "👤" if rtype == "user" else "🤖"
-            msg_text = text[:300]
-
-            if query_terms:
-                text_lower = msg_text.lower()
-                has_match = any(t.lower() in text_lower for t in query_terms)
-                highlighted = _highlight_text(msg_text, query)
-                entry = f"\n{prefix} {highlighted}"
-                if has_match:
-                    matched_msgs.append(entry)
-                else:
-                    other_msgs.append(entry)
-            else:
-                other_msgs.append(f"\n{prefix} {msg_text}")
-
-    except OSError:
-        other_msgs.append("[파일 읽기 오류]")
-
-    if query_terms and matched_msgs:
-        sep = [f"\n\x1b[1;33m── 검색어 '{query}' 포함 메시지 ({len(matched_msgs)}개) ──\x1b[0m"]
-        messages = sep + matched_msgs
-        if other_msgs:
-            messages += ["\n\x1b[90m── 나머지 메시지 ──\x1b[0m"] + other_msgs[:20]
-    else:
-        messages = other_msgs
-
-    return "\n".join(header + messages)
-
-
-# ─── tmux 통합: 왼쪽 fzf 브라우저 + Enter시 오른쪽 분할 ─────────────────────
 
 def _ask_target_slot(slots: list[dict], sessions: list[dict]) -> int | None:
     """슬롯 선택 프롬프트. 선택된 슬롯 인덱스(0 or 1) 반환, 취소/잘못된 입력은 None."""
@@ -1765,7 +1667,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             pass
 
     header = (
-        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-E:파일브라우저  Ctrl-P:미리보기토글\n"
+        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-E:파일브라우저\n"
         "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글\n"
         "Ctrl-X:컨텍스트주입  Ctrl-G:Git현황  Ctrl-Z:detach  Ctrl-Q:종료"
     )
@@ -1796,15 +1698,13 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
         [
             "fzf",
             "--ansi", "--disabled", "--no-sort", "--layout=reverse", "--border",
+            "--delimiter=\t", "--with-nth=1",
             "--multi",
             "--header-lines=1",
             "--prompt=세션 검색> ",
             f"--header={header}",
             "--color=hl:#ffaf00,hl+:#ffaf00",
-            f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file} --query-file {query_file}",
-            "--preview-window=bottom:40%:wrap:hidden",
             # 검색어 변경 → query 파일 기록 + 서버사이드 필터 reload + preview 갱신
-            f"--bind=change:reload({_reload_with_cache})+refresh-preview",
             # 시작 시 green/yellow 점 동기화
             f"--bind=start:reload(python3 {script_path} --fzf-list-lines --sessions-cache {cache_file})",
             # Tab: 다중 선택 후 아래로 이동
@@ -1836,9 +1736,6 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             f"--bind=ctrl-z:execute-silent(tmux detach-client)",
             # ctrl-q: 세션 완전 종료
             f"--bind=ctrl-q:execute-silent(tmux kill-session -t {tmux_session})+abort",
-            "--bind=ctrl-p:toggle-preview",
-            "--bind=shift-down:preview-down",
-            "--bind=shift-up:preview-up",
             # ctrl-d: 선택 항목 삭제 ({+f}로 다중 선택 전달)
             (
                 f"--bind=ctrl-d:execute(python3 {script_path}"
@@ -1989,12 +1886,9 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                 "--ansi", "--exact", "--height=90%",
                 "--layout=reverse", "--border",
                 "--prompt=세션 검색> ",
-                "--header=Enter:Resume  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-P:미리보기토글  Ctrl-C:닫기\nShift+↓↑:미리보기스크롤  Tab:다중선택  Ctrl-R:정렬토글",
+                "--header=Enter:Resume  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-C:닫기\nShift+↓↑:미리보기스크롤  Tab:다중선택  Ctrl-R:정렬토글",
                 "--multi",
                 "--color=hl:#ffaf00,hl+:#ffaf00",
-                f"--preview=python3 {script_path} --preview-id {{-1}} --sessions-cache {cache_file} --query-file {query_file}",
-                "--preview-window=bottom:40%:wrap:hidden",
-                f"--bind=change:execute-silent(printf '%s' {{q}} > {query_file})+refresh-preview",
                 f"--bind=enter:execute(printf 'resume:%s' {{-1}} > {action_file} 2>/dev/null)+abort",
                 "--bind=tab:toggle+down",
                 (
@@ -2007,9 +1901,6 @@ def run_fzf(sessions: list[dict]) -> dict | None:
                     f" --fzf-action edit-title {{-1}} --sessions-cache {cache_file})"
                     f"+reload({_reload_fresh})"
                 ),
-                "--bind=ctrl-p:toggle-preview",
-                "--bind=shift-down:preview-down",
-                "--bind=shift-up:preview-up",
                 f"--bind=ctrl-r:reload({_toggle_sort})",
             ],
             input="\n".join(lines),
@@ -2049,7 +1940,6 @@ def main() -> None:
     parser.add_argument("--claude-mode", action="store_true", help="Claude용 평문 텍스트 출력")
     parser.add_argument("--filter", metavar="KEYWORD", default="")
     parser.add_argument("--no-tmux", action="store_true", help="tmux 없이 fzf 단독 실행")
-    parser.add_argument("--preview-id", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--sessions-cache", metavar="PATH", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-list-lines", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-toggle-sort", action="store_true", help=argparse.SUPPRESS)
@@ -2073,32 +1963,6 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-
-    # fzf preview 모드
-    if args.preview_id:
-        if args.sessions_cache:
-            try:
-                sessions = json.loads(Path(args.sessions_cache).read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                sessions = load_all_sessions()
-        else:
-            sessions = load_all_sessions()
-
-        session = next((s for s in sessions if s.get("sessionId") == args.preview_id), None)
-        if session:
-            highlight = ""
-            if args.query_file:
-                try:
-                    highlight = Path(args.query_file).read_text(encoding="utf-8").strip()
-                except OSError:
-                    pass
-            if not highlight and args.highlight:
-                highlight = " ".join(args.highlight)
-            output = format_session_preview(session, highlight=highlight)
-        else:
-            output = f"세션을 찾을 수 없습니다: {args.preview_id}"
-        print(output)
-        return
 
     # tmux 내부: 오른쪽 분할 열기
     if args.tmux_split_open:
