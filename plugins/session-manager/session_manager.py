@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.3.9"
+VERSION = "2.4.0"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1113,12 +1113,17 @@ def run_yazi_popup(session_id: str, sessions_cache_path: str) -> None:
     project_path = session.get("projectPath", "") if session else ""
     work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
 
+    config_home = str(Path.home() / ".config" / "yazi")
+    env = os.environ.copy()
+    env["YAZI_CONFIG_HOME"] = config_home
+    # 팝업 배경색: yazi 테마와 맞춤 (투명도 무시하고 고정)
     subprocess.run([
         "tmux", "display-popup",
         "-E", "-w", "95%", "-h", "90%",
         "-d", work_dir,
-        "yazi",
-    ])
+        "-s", "bg=#282a36",  # Dracula bg
+        f"YAZI_CONFIG_HOME={config_home} /home/seoji/.local/bin/cs-yazi",
+    ], env=env)
 
 
 def tmux_open_lazygit(session_id: str, sessions_cache_path: str) -> None:
