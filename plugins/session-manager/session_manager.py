@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.4.1"
+VERSION = "2.4.2"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1125,7 +1125,7 @@ def run_yazi_popup(session_id: str, sessions_cache_path: str) -> None:
         "tmux", "display-popup",
         "-E", "-w", "95%", "-h", "90%",
         "-d", work_dir,
-        "-s", "bg=#282a36",  # Dracula bg
+        "-s", "bg=#0d1117",  # GitHub Dark
         f"YAZI_CONFIG_HOME={config_home} /home/seoji/.local/bin/cs-yazi",
     ], env=env)
 
