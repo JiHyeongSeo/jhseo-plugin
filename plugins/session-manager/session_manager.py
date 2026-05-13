@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.4.2"
+VERSION = "2.4.3"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -196,7 +196,7 @@ def parse_jsonl_session(jsonl_path: Path) -> dict | None:
 
 def _parse_gemini_chat_file(chat_file: Path) -> tuple[str, list[dict], str, str]:
     """Gemini 세션 파일(.json/.jsonl) 파싱 → (sessionId, messages, startTime, lastUpdated)."""
-    raw = chat_file.read_text(encoding="utf-8")
+    raw = chat_file.read_text(encoding="utf-8", errors="replace")
     session_id = chat_file.stem
     messages: list[dict] = []
     start_time = ""
@@ -298,7 +298,7 @@ def load_gemini_sessions() -> list[dict]:
                     "modified": last_updated,
                     "gitBranch": "",
                 })
-            except (OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
                 pass
     return sessions
 
