@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.4.5"
+VERSION = "2.4.6"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -706,7 +706,7 @@ def format_session_line(
         tool_badge = "\x1b[34m[G]\x1b[0m"
     else:
         tool_badge = "\x1b[36m[C]\x1b[0m"
-    display = f"{indicator}{tool_badge} {date}  {project:<20}  {summary:<60}"
+    display = f"{indicator}{tool_badge} {project:<20}  {summary:<60}"
     # session_id는 Tab으로 분리 — fzf --with-nth=1 로 화면에서 숨김
     return f"{display}\t{session_id}"
 
