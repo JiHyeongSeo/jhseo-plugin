@@ -489,17 +489,6 @@ def _write_state(state: dict) -> None:
     _STATE_FILE.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
 
-def _get_all_pane_ids(tmux_session: str) -> set[str]:
-    """window 0의 모든 pane ID 반환 (%숫자 형식)."""
-    result = subprocess.run(
-        ["tmux", "list-panes", "-t", f"{tmux_session}:0", "-F", "#{pane_id}"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        return set()
-    return set(result.stdout.split())
-
-
 def _get_fzf_pane_id(tmux_session: str) -> str:
     """fzf pane(window 0의 index 0 pane) ID 반환. 실패 시 세션:0.0 대체값."""
     result = subprocess.run(
@@ -516,22 +505,6 @@ def _get_fzf_pane_id(tmux_session: str) -> str:
     return f"{tmux_session}:0.0"
 
 
-def _find_bg_window_idx(session_id: str, tmux_session: str) -> str | None:
-    """session_id와 이름이 일치하는 bg window index 반환. 없으면 None."""
-    win_result = subprocess.run(
-        ["tmux", "list-windows", "-t", tmux_session,
-         "-F", "#{window_index} #{window_name}"],
-        capture_output=True, text=True,
-    )
-    if win_result.returncode != 0:
-        return None
-    for line in win_result.stdout.strip().split("\n"):
-        parts = line.strip().split(" ", 1)
-        if len(parts) == 2 and parts[1] == session_id:
-            return parts[0]
-    return None
-
-
 def _get_active_pane_id(tmux_session: str) -> str:
     """window 0의 현재 활성 pane ID 반환. split/join 직후 호출하면 새 pane ID를 반환."""
     r = subprocess.run(
@@ -539,36 +512,6 @@ def _get_active_pane_id(tmux_session: str) -> str:
         capture_output=True, text=True,
     )
     return r.stdout.strip()
-
-
-def fzf_select_target(sessions: list[dict], open_ids: set[str]) -> str | None:
-    """전체 세션 목록 fzf로 보여주고 선택된 session_id 반환. 취소 시 None."""
-    lines = []
-    for s in sessions:
-        sid = s.get("sessionId", "")
-        indicator = "\x1b[32m[열림]\x1b[0m" if sid in open_ids else "\x1b[90m[닫힘]\x1b[0m"
-        date = s.get("modified", "")[:10]
-        project = s.get("projectPath", "?").split("/")[-1]
-        summary = get_display_summary(s)[:50]
-        lines.append(f"{indicator} {date}  {project:<20}  {summary}  {sid}")
-
-    result = subprocess.run(
-        [
-            "fzf",
-            "--ansi",
-            "--layout=reverse",
-            "--prompt=주입할 세션 선택> ",
-            "--header=Enter:선택  Esc:취소",
-            "--with-nth=1..-2",
-        ],
-        input="\n".join(lines),
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-
-    if result.returncode != 0 or not result.stdout.strip():
-        return None
-    return result.stdout.strip().split()[-1]
 
 
 def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None:
@@ -593,7 +536,22 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
         return
 
     slot_ids, bg_ids = get_tmux_open_sessions()
-    target_id = fzf_select_target(fresh, slot_ids | bg_ids)
+    open_ids = slot_ids | bg_ids
+    _lines = []
+    for s in fresh:
+        sid = s.get("sessionId", "")
+        indicator = "\x1b[32m[열림]\x1b[0m" if sid in open_ids else "\x1b[90m[닫힘]\x1b[0m"
+        date = s.get("modified", "")[:10]
+        project = s.get("projectPath", "?").split("/")[-1]
+        summary = get_display_summary(s)[:50]
+        _lines.append(f"{indicator} {date}  {project:<20}  {summary}  {sid}")
+    _pick = subprocess.run(
+        ["fzf", "--ansi", "--layout=reverse",
+         "--prompt=주입할 세션 선택> ", "--header=Enter:선택  Esc:취소",
+         "--with-nth=1..-2"],
+        input="\n".join(_lines), stdout=subprocess.PIPE, text=True,
+    )
+    target_id = _pick.stdout.strip().split()[-1] if _pick.returncode == 0 and _pick.stdout.strip() else None
     if not target_id:
         return
 
@@ -1083,42 +1041,6 @@ def navigate_yazi(project_path: str) -> None:
     subprocess.run(["tmux", "send-keys", "-t", yazi_pane, f"{yazi_bin} {work_dir}", "Enter"])
 
 
-def run_yazi_popup(session_id: str, sessions_cache_path: str) -> None:
-    """Ctrl+E: yazi 파일 브라우저를 팝업으로 실행. q로 닫기, e로 파일 편집."""
-    if not shutil.which("yazi"):
-        sys.stderr.write("\n  yazi 미설치. 설치 중...\n")
-        sys.stderr.flush()
-        if not _install_yazi():
-            sys.stderr.write("  설치 실패. cs --install-yazi 로 재시도\n")
-            sys.stderr.flush()
-            return
-
-    sessions: list[dict] = []
-    if sessions_cache_path:
-        try:
-            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            pass
-    if not sessions:
-        sessions = load_all_sessions()
-
-    session = next((s for s in sessions if s.get("sessionId") == session_id), None)
-    project_path = session.get("projectPath", "") if session else ""
-    work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
-
-    config_home = str(Path.home() / ".config" / "yazi")
-    env = os.environ.copy()
-    env["YAZI_CONFIG_HOME"] = config_home
-    # 팝업 배경색: yazi 테마와 맞춤 (투명도 무시하고 고정)
-    subprocess.run([
-        "tmux", "display-popup",
-        "-E", "-w", "95%", "-h", "90%",
-        "-d", work_dir,
-        "-s", "bg=#0d1117",  # GitHub Dark
-        f"YAZI_CONFIG_HOME={config_home} /home/seoji/.local/bin/cs-yazi",
-    ], env=env)
-
-
 def tmux_open_lazygit(session_id: str, sessions_cache_path: str) -> None:
     """Ctrl+G: 선택된 세션의 프로젝트 디렉터리에서 lazygit을 팝업으로 실행.
 
@@ -1286,43 +1208,6 @@ def format_session_preview(session: dict, highlight: str = "") -> str:
 
 # ─── tmux 통합: 왼쪽 fzf 브라우저 + Enter시 오른쪽 분할 ─────────────────────
 
-def _ask_target_slot(slots: list[dict], sessions: list[dict]) -> int | None:
-    """슬롯 선택 프롬프트. 선택된 슬롯 인덱스(0 or 1) 반환, 취소/잘못된 입력은 None."""
-    labels = ["위", "아래"]
-    lines = ["\n  어느 슬롯에 열까요?\n"]
-    for i, slot in enumerate(slots[:2]):
-        sid = slot["session_id"]
-        session = next((s for s in sessions if s.get("sessionId") == sid), None)
-        project = (session.get("projectPath", "?").split("/")[-1] if session else "?")[:15]
-        summary = get_display_summary(session)[:35] if session else sid[:20]
-        lines.append(f"  {i + 1}) {labels[i]:<4} │ {project} — {summary}")
-    lines.append(f"\n  선택 (1/{len(slots[:2])}): ")
-    prompt = "\n".join(lines)
-    try:
-        choice = _tty_input(prompt).strip()
-    except (KeyboardInterrupt, EOFError):
-        return None
-    try:
-        idx = int(choice) - 1
-        if 0 <= idx < len(slots):
-            return idx
-    except ValueError:
-        pass
-    return None
-
-
-def _get_right_width(tmux_session: str) -> int:
-    """tmux 윈도우 너비의 60%를 절대값으로 반환."""
-    w_result = subprocess.run(
-        ["tmux", "display-message", "-t", f"{tmux_session}:0", "-p", "#{window_width}"],
-        capture_output=True, text=True,
-    )
-    try:
-        return max(60, int(int(w_result.stdout.strip()) * 0.70))
-    except ValueError:
-        return 130
-
-
 def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     """Enter: 선택한 세션을 우측 고정 pane에서 실행 + yazi 프로젝트 경로 이동."""
     sessions: list[dict] = []
@@ -1358,81 +1243,6 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
 
     _write_state({**state, "right_session_id": session_id})
     navigate_yazi(work_dir)
-
-
-def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
-    """Ctrl+S: 슬롯 2 생성. 슬롯이 1개일 때만 동작.
-
-    슬롯 0개 또는 2개: 무시
-    이미 슬롯에 열린 세션: 해당 슬롯 포커스
-    """
-    sessions: list[dict] = []
-    if sessions_cache_path:
-        try:
-            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            pass
-    if not sessions:
-        sessions = load_all_sessions()
-
-    session = next((s for s in sessions if s.get("sessionId") == session_id), None)
-    if not session:
-        # cache stale (새 세션) → 디스크에서 새로 로드 후 재시도
-        sessions = load_all_sessions()
-        session = next((s for s in sessions if s.get("sessionId") == session_id), None)
-    if not session:
-        return
-
-    project_path = session.get("projectPath", "")
-    tmux_session = "claude-browser"
-    work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
-
-    state = _read_state()
-    bg_list: list[str] = state.get("background", [])
-
-    # 죽은 pane 자동 정리
-    live_pane_ids = _get_all_pane_ids(tmux_session)
-    slots: list[dict] = [s for s in state.get("slots", []) if s.get("pane_id", "") in live_pane_ids]
-    if slots != state.get("slots", []):
-        _write_state({"slots": slots, "background": bg_list})
-
-    # 슬롯 1개일 때만 동작
-    if len(slots) != 1:
-        return
-
-    # 이미 슬롯에 열린 세션이면 포커스만
-    pane_title = get_display_summary(session)[:60]
-    for slot in slots:
-        if slot["session_id"] == session_id:
-            subprocess.run(["tmux", "set-option", "-p", "-t", slot["pane_id"], "@cs_title", pane_title])
-            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
-            return
-
-    bg_list_new = [s for s in bg_list if s != session_id]
-    bg_window_idx = _find_bg_window_idx(session_id, tmux_session)
-    slot0_pane_id = slots[0]["pane_id"]
-
-    if bg_window_idx is not None:
-        subprocess.run([
-            "tmux", "join-pane", "-v",
-            "-s", f"{tmux_session}:{bg_window_idx}",
-            "-t", slot0_pane_id,
-        ])
-    else:
-        subprocess.run([
-            "tmux", "split-window", "-v",
-            "-t", slot0_pane_id, "-c", work_dir,
-            _resume_cmd(session),
-        ])
-
-    new_pane_id = _get_active_pane_id(tmux_session)
-    if not new_pane_id:
-        return
-
-    subprocess.run(["tmux", "set-option", "-p", "-t", new_pane_id, "@cs_title", pane_title])
-    slots.append({"session_id": session_id, "pane_id": new_pane_id})
-    _write_state({"slots": slots, "background": bg_list_new})
-    subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
 
 
 def tmux_new_session(sessions_cache_path: str) -> None:
@@ -1863,13 +1673,11 @@ def main() -> None:
     parser.add_argument("--lazygit", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--install-lazygit", action="store_true", help="lazygit 설치")
     parser.add_argument("--install-yazi", action="store_true", help="yazi 설치")
-    parser.add_argument("--yazi-popup", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--highlight", nargs="*", default=[], help=argparse.SUPPRESS)
     parser.add_argument("--query-file", metavar="PATH", help=argparse.SUPPRESS)
     # tmux 내부 실행용
     parser.add_argument("--tmux-browser", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-split-open", metavar="SESSION_ID", help=argparse.SUPPRESS)
-    parser.add_argument("--tmux-split-add", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-new-session", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
@@ -1907,10 +1715,6 @@ def main() -> None:
     # tmux 내부: 오른쪽 분할 열기
     if args.tmux_split_open:
         tmux_split_open(args.tmux_split_open, args.sessions_cache or "")
-        return
-
-    if args.tmux_split_add:
-        tmux_split_add(args.tmux_split_add, args.sessions_cache or "")
         return
 
     if args.tmux_new_session:
@@ -2023,10 +1827,6 @@ def main() -> None:
 
     if args.install_yazi:
         _install_yazi()
-        return
-
-    if args.yazi_popup:
-        run_yazi_popup(args.yazi_popup, args.sessions_cache or "")
         return
 
     # fzf 액션: delete / edit-title

@@ -385,28 +385,6 @@ class TestLoadAllSessionsWithJsonl:
         assert result[0]["sessionId"] == "s1"
 
 
-class TestGetAllPaneIds:
-    def test_returns_pane_ids(self, monkeypatch):
-        def fake_run(cmd, **kwargs):
-            class R:
-                returncode = 0
-                stdout = "%10\n%23\n%24\n"
-            return R()
-        monkeypatch.setattr(session_manager.subprocess, "run", fake_run)
-        result = session_manager._get_all_pane_ids("claude-browser")
-        assert result == {"%10", "%23", "%24"}
-
-    def test_returns_empty_on_error(self, monkeypatch):
-        def fake_run(cmd, **kwargs):
-            class R:
-                returncode = 1
-                stdout = ""
-            return R()
-        monkeypatch.setattr(session_manager.subprocess, "run", fake_run)
-        result = session_manager._get_all_pane_ids("claude-browser")
-        assert result == set()
-
-
 class TestReadStateNewFormat:
     def test_default_has_slots_list(self, tmp_path, monkeypatch):
         # 스키마 단순화: 파일 없을 때 빈 dict 반환 (Task 1)
@@ -446,53 +424,6 @@ class TestFormatSessionLineNewSignature:
         import re
         plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
         assert plain.split()[-1] == "abc-444"
-
-
-class TestAskTargetSlot:
-    def _make_slots(self):
-        return [
-            {"session_id": "sess-a", "pane_id": "%23"},
-            {"session_id": "sess-b", "pane_id": "%24"},
-        ]
-
-    def _make_sessions(self):
-        return [
-            make_session("sess-a"),
-            make_session("sess-b"),
-        ]
-
-    def test_returns_0_when_user_enters_1(self, monkeypatch):
-        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "1")
-        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
-        assert result == 0
-
-    def test_returns_1_when_user_enters_2(self, monkeypatch):
-        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "2")
-        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
-        assert result == 1
-
-    def test_returns_none_on_invalid_input(self, monkeypatch):
-        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "x")
-        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
-        assert result is None
-
-    def test_returns_none_on_empty_input(self, monkeypatch):
-        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "")
-        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
-        assert result is None
-
-    def test_returns_none_on_out_of_range(self, monkeypatch):
-        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "3")
-        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
-        assert result is None
-
-    def test_prompt_contains_slot_summaries(self, monkeypatch):
-        prompts = []
-        monkeypatch.setattr(session_manager, "_tty_input", lambda p: prompts.append(p) or "")
-        session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
-        assert len(prompts) == 1
-        assert "위" in prompts[0]
-        assert "아래" in prompts[0]
 
 
 class TestNewState:
