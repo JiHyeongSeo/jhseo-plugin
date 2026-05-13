@@ -666,35 +666,11 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
 
 
 def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
-    """상태 파일 + tmux 실제 상태로 열린 세션 목록 반환.
-
-    Returns:
-        (slot_session_ids, background_session_ids)
-        slot_session_ids: 현재 pane에 열린 세션 (초록 표시)
-        background_session_ids: bg window에 보존된 세션 (노랑 표시)
-    """
+    """상태 파일에서 우측 pane의 열린 세션 반환."""
     state = _read_state()
-    slots: list[dict] = state.get("slots", [])
-    bg_list: list[str] = state.get("background", [])
-
-    all_pane_ids = _get_all_pane_ids(tmux_session)
-    slot_ids = {
-        slot["session_id"]
-        for slot in slots
-        if slot.get("pane_id", "") in all_pane_ids
-    }
-
-    bg_sessions: set[str] = set()
-    if bg_list:
-        win_result = subprocess.run(
-            ["tmux", "list-windows", "-t", tmux_session, "-F", "#{window_name}"],
-            capture_output=True, text=True,
-        )
-        if win_result.returncode == 0:
-            window_names = set(win_result.stdout.split())
-            bg_sessions = {s for s in bg_list if s in window_names}
-
-    return slot_ids, bg_sessions
+    right_session_id = state.get("right_session_id", "")
+    slot_ids = {right_session_id} if right_session_id else set()
+    return slot_ids, set()
 
 
 def format_session_line(
