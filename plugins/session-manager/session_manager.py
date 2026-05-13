@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.3.7"
+VERSION = "2.3.8"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1163,26 +1163,17 @@ def _install_yazi() -> bool:
         return False
 
 
-def run_ide_layout(sessions_cache_path: str = "") -> None:
-    """Ctrl+E: IDE 레이아웃 생성.
 
-    fzf(좌상) + yazi(좌하) | 에디터(중) | Claude(우)
-    yazi에서 e키로 중앙 에디터 pane에 파일을 열 수 있습니다.
-    """
+def run_yazi_popup(session_id: str, sessions_cache_path: str) -> None:
+    """Ctrl+E: yazi 파일 브라우저를 팝업으로 실행. q로 닫기, e로 파일 편집."""
     if not shutil.which("yazi"):
         sys.stderr.write("\n  yazi 미설치. 설치 중...\n")
         sys.stderr.flush()
         if not _install_yazi():
-            sys.stderr.write("  설치 실패. https://yazi-rs.github.io 참고\n")
+            sys.stderr.write("  설치 실패. cs --install-yazi 로 재시도\n")
             sys.stderr.flush()
             return
 
-    tmux_session = "claude-browser"
-    fzf_pane = _get_fzf_pane_id(tmux_session)
-    if not fzf_pane:
-        return
-
-    # 작업 디렉터리 선택
     sessions: list[dict] = []
     if sessions_cache_path:
         try:
@@ -1192,112 +1183,16 @@ def run_ide_layout(sessions_cache_path: str = "") -> None:
     if not sessions:
         sessions = load_all_sessions()
 
-    session_dirs = sorted({
-        s.get("projectPath", "")
-        for s in sessions
-        if s.get("projectPath") and Path(s.get("projectPath", "")).is_dir()
-    })
-    try:
-        find_result = subprocess.run(
-            ["find", str(Path.home()), "-maxdepth", "3", "-type", "d",
-             "!", "-path", "*/.*", "!", "-path", "*/node_modules/*",
-             "!", "-path", "*/__pycache__/*"],
-            capture_output=True, text=True, timeout=5,
-        )
-        find_dirs = [d for d in find_result.stdout.strip().split("\n") if d]
-    except subprocess.TimeoutExpired:
-        find_dirs = []
-    seen: set[str] = set(session_dirs)
-    all_dirs = list(session_dirs) + [d for d in find_dirs if d not in seen]
-    if not all_dirs:
-        all_dirs = [str(Path.home())]
+    session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    project_path = session.get("projectPath", "") if session else ""
+    work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
 
-    dir_result = subprocess.run(
-        ["fzf", "--prompt", "IDE 디렉터리 선택: ",
-         "--height", "80%", "--reverse", "--border",
-         "--header", "Enter:선택  Esc:취소"],
-        input="\n".join(all_dirs),
-        capture_output=True, text=True,
-    )
-    if dir_result.returncode != 0:
-        return
-    work_dir = dir_result.stdout.strip()
-    if not work_dir or not Path(work_dir).is_dir():
-        return
-
-    # 기존 슬롯 정리
-    state = _read_state()
-    bg_list: list[str] = state.get("background", [])
-    live_pane_ids = _get_all_pane_ids(tmux_session)
-    for slot in state.get("slots", []):
-        pane_id = slot.get("pane_id", "")
-        if pane_id not in live_pane_ids:
-            continue
-        old_sid = slot.get("session_id", "")
-        subprocess.run(["tmux", "break-pane", "-d", "-s", pane_id, "-n", old_sid or pane_id])
-        if pane_id in _get_all_pane_ids(tmux_session):
-            subprocess.run(["tmux", "kill-pane", "-t", pane_id], capture_output=True)
-            old_sid = ""
-        if old_sid and old_sid not in bg_list:
-            bg_list.append(old_sid)
-    _write_state({"slots": [], "background": bg_list})
-
-    # 너비 계산 (fzf:editor:claude ≈ 25:45:30)
-    try:
-        total_w = int(subprocess.run(
-            ["tmux", "display-message", "-p", "#{window_width}"],
-            capture_output=True, text=True,
-        ).stdout.strip())
-    except ValueError:
-        total_w = 220
-    claude_w = int(total_w * 0.30)
-    editor_w = int(total_w * 0.45)
-
-    # 중앙 에디터 pane 생성 (빈 shell)
     subprocess.run([
-        "tmux", "split-window", "-h", "-l", str(editor_w + claude_w),
-        "-t", fzf_pane, "-c", work_dir,
+        "tmux", "display-popup",
+        "-E", "-w", "95%", "-h", "90%",
+        "-d", work_dir,
+        "yazi",
     ])
-    editor_pane = _get_active_pane_id(tmux_session)
-    if not editor_pane:
-        return
-
-    # 우측 Claude pane 생성
-    subprocess.run([
-        "tmux", "split-window", "-h", "-l", str(claude_w),
-        "-t", editor_pane, "-c", work_dir,
-        "claude",
-    ])
-    claude_pane = _get_active_pane_id(tmux_session)
-
-    # yazi에서 e키 → 중앙 editor pane에서 파일 열기 wrapper
-    editor_cmd = os.environ.get("EDITOR", "vi")
-    open_script = Path("/tmp/cs-yazi-open.sh")
-    open_script.write_text(
-        "#!/bin/bash\n"
-        f'tmux send-keys -t {editor_pane} "{editor_cmd} \\"$1\\"" Enter\n',
-        encoding="utf-8",
-    )
-    os.chmod(open_script, 0o755)
-
-    # 좌측 하단 yazi pane (fzf 아래 40%)
-    subprocess.run([
-        "tmux", "split-window", "-v", "-l", "40%",
-        "-t", fzf_pane, "-c", work_dir,
-        f"EDITOR={open_script} yazi",
-    ])
-
-    # 슬롯에 Claude pane 등록
-    if claude_pane:
-        _write_state({"slots": [{"session_id": "", "pane_id": claude_pane}], "background": bg_list})
-
-    # 에디터 pane에 사용법 안내 후 포커스
-    if editor_pane:
-        subprocess.run([
-            "tmux", "send-keys", "-t", editor_pane,
-            "echo '[ yazi에서 e키 → 이 창에서 파일 열림 ]'", "Enter",
-        ])
-        subprocess.run(["tmux", "select-pane", "-t", editor_pane])
 
 
 def tmux_open_lazygit(session_id: str, sessions_cache_path: str) -> None:
@@ -1911,7 +1806,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             pass
 
     header = (
-        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-E:IDE레이아웃  Ctrl-P:미리보기토글\n"
+        "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-E:파일브라우저  Ctrl-P:미리보기토글\n"
         "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글\n"
         "Ctrl-X:컨텍스트주입  Ctrl-F:파일열기  Ctrl-G:Git현황  Ctrl-Z:detach  Ctrl-Q:종료"
     )
@@ -2008,7 +1903,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             ),
             # ctrl-f: 파일 검색 후 $EDITOR로 좌우 분할 새 pane에서 열기
             f"--bind=ctrl-f:execute(python3 {script_path} --fzf-open-file)",
-            f"--bind=ctrl-e:execute(python3 {script_path} --ide-layout --sessions-cache {cache_file})",
+            f"--bind=ctrl-e:execute(python3 {script_path} --yazi-popup {{-1}} --sessions-cache {cache_file})",
             (
                 f"--bind=ctrl-g:execute(python3 {script_path} --lazygit {{-1}}"
                 f" --sessions-cache {cache_file})"
@@ -2208,7 +2103,7 @@ def main() -> None:
     parser.add_argument("--lazygit", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--install-lazygit", action="store_true", help="lazygit 설치")
     parser.add_argument("--install-yazi", action="store_true", help="yazi 설치")
-    parser.add_argument("--ide-layout", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--yazi-popup", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--highlight", nargs="*", default=[], help=argparse.SUPPRESS)
     parser.add_argument("--query-file", metavar="PATH", help=argparse.SUPPRESS)
     # tmux 내부 실행용
@@ -2374,8 +2269,8 @@ def main() -> None:
         _install_yazi()
         return
 
-    if args.ide_layout:
-        run_ide_layout(args.sessions_cache or "")
+    if args.yazi_popup:
+        run_yazi_popup(args.yazi_popup, args.sessions_cache or "")
         return
 
     # fzf 액션: delete / edit-title
