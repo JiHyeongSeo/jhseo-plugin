@@ -482,7 +482,7 @@ def _read_state() -> dict:
     try:
         return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"slots": [], "background": []}
+        return {}
 
 
 def _write_state(state: dict) -> None:
@@ -1092,6 +1092,19 @@ def _install_yazi() -> bool:
         print(f"  설치 실패: {e}")
         return False
 
+
+
+def navigate_yazi(project_path: str, tmux_session: str = "claude-browser") -> None:
+    """yazi pane을 project_path로 이동. yazi 재시작 방식."""
+    state = _read_state()
+    yazi_pane = state.get("yazi_pane_id", "")
+    if not yazi_pane:
+        return
+    work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
+    yazi_bin = shutil.which("yazi") or "yazi"
+    subprocess.run(["tmux", "send-keys", "-t", yazi_pane, "q", ""])
+    time.sleep(0.05)
+    subprocess.run(["tmux", "send-keys", "-t", yazi_pane, f"{yazi_bin} {work_dir}", "Enter"])
 
 
 def run_yazi_popup(session_id: str, sessions_cache_path: str) -> None:

@@ -409,11 +409,10 @@ class TestGetAllPaneIds:
 
 class TestReadStateNewFormat:
     def test_default_has_slots_list(self, tmp_path, monkeypatch):
+        # 스키마 단순화: 파일 없을 때 빈 dict 반환 (Task 1)
         monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
         result = session_manager._read_state()
-        assert "slots" in result
-        assert result["slots"] == []
-        assert result["background"] == []
+        assert result == {}
 
     def test_reads_slots_format(self, tmp_path, monkeypatch):
         state_file = tmp_path / "state.json"
@@ -557,3 +556,45 @@ class TestAskTargetSlot:
         assert len(prompts) == 1
         assert "위" in prompts[0]
         assert "아래" in prompts[0]
+
+
+class TestNewState:
+    def test_read_state_default_empty(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
+        assert session_manager._read_state() == {}
+
+    def test_write_read_state_roundtrip(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
+        state = {"right_session_id": "abc", "yazi_pane_id": "%5", "claude_pane_id": "%6"}
+        session_manager._write_state(state)
+        assert session_manager._read_state() == state
+
+
+class TestNavigateYazi:
+    def test_navigate_valid_path(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
+        session_manager._write_state({"yazi_pane_id": "%99"})
+        calls = []
+        monkeypatch.setattr(session_manager.subprocess, "run", lambda *a, **kw: calls.append(a[0]))
+        monkeypatch.setattr(session_manager.time, "sleep", lambda _: None)
+        session_manager.navigate_yazi(str(tmp_path))
+        assert any("q" in c for c in calls)
+        assert any(str(tmp_path) in " ".join(c) for c in calls)
+
+    def test_navigate_invalid_path_uses_home(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
+        session_manager._write_state({"yazi_pane_id": "%99"})
+        calls = []
+        monkeypatch.setattr(session_manager.subprocess, "run", lambda *a, **kw: calls.append(a[0]))
+        monkeypatch.setattr(session_manager.time, "sleep", lambda _: None)
+        session_manager.navigate_yazi("/nonexistent/path/xyz")
+        home = str(Path.home())
+        assert any(home in " ".join(c) for c in calls)
+
+    def test_navigate_no_pane_id_noop(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
+        session_manager._write_state({})
+        calls = []
+        monkeypatch.setattr(session_manager.subprocess, "run", lambda *a, **kw: calls.append(a[0]))
+        session_manager.navigate_yazi(str(tmp_path))
+        assert calls == []
