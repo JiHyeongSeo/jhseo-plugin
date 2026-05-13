@@ -665,7 +665,7 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
     sys.stderr.flush()
 
 
-def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
+def get_tmux_open_sessions() -> tuple[set[str], set[str]]:
     """상태 파일에서 우측 pane의 열린 세션 반환."""
     state = _read_state()
     right_session_id = state.get("right_session_id", "")
