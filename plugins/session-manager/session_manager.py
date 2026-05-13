@@ -508,10 +508,15 @@ def _get_fzf_pane_id(tmux_session: str) -> str:
 def _get_active_pane_id(tmux_session: str) -> str:
     """window 0의 현재 활성 pane ID 반환. split/join 직후 호출하면 새 pane ID를 반환."""
     r = subprocess.run(
-        ["tmux", "display-message", "-t", f"{tmux_session}:0", "-p", "#{pane_id}"],
+        ["tmux", "list-panes", "-t", f"{tmux_session}:0",
+         "-F", "#{pane_id} #{pane_active}"],
         capture_output=True, text=True,
     )
-    return r.stdout.strip()
+    for line in r.stdout.strip().splitlines():
+        parts = line.strip().split()
+        if len(parts) == 2 and parts[1] == "1":
+            return parts[0]
+    return ""
 
 
 def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None:
@@ -1499,11 +1504,32 @@ def run_tmux_layout() -> None:
     if subprocess.run(
         ["tmux", "has-session", "-t", tmux_session], capture_output=True
     ).returncode == 0:
-        fzf_alive = subprocess.run(
-            ["tmux", "list-panes", "-t", f"{tmux_session}:0", "-F", "#{pane_index}"],
+        pane_info = subprocess.run(
+            ["tmux", "list-panes", "-t", f"{tmux_session}:0",
+             "-F", "#{pane_index} #{pane_current_command}"],
             capture_output=True, text=True,
         ).stdout.strip().splitlines()
-        if "0" in fzf_alive:
+        pane0_exists = any(line.startswith("0 ") for line in pane_info)
+        if pane0_exists:
+            pane0_cmd = next(
+                (line.split(None, 1)[1] for line in pane_info if line.startswith("0 ")),
+                "",
+            )
+            # fzf/python이 죽어있으면 재시작
+            if pane0_cmd in ("bash", "zsh", "sh", "fish"):
+                cache_file = "/tmp/claude-browser-cache.json"
+                query_file = "/tmp/claude-browser-query.txt"
+                Path(query_file).write_text("", encoding="utf-8")
+                browser_cmd = (
+                    f"stty -ixon; python3 {script_path} --tmux-browser"
+                    f" --sessions-cache {cache_file}"
+                    f" --query-file {query_file}"
+                    f" || (echo ''; echo '[cs 오류] Enter로 종료...'; read _)"
+                    f"; tmux detach-client 2>/dev/null"
+                )
+                subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0.0",
+                                 browser_cmd, "Enter"])
+            subprocess.run(["tmux", "select-pane", "-t", f"{tmux_session}:0.0"])
             if os.environ.get("TMUX"):
                 subprocess.run(["tmux", "switch-client", "-t", tmux_session])
             else:
