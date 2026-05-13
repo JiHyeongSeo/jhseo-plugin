@@ -1,7 +1,7 @@
 {
   "name": "session-manager",
   "description": "AI 세션 브라우저. Claude/Gemini 멀티슬롯 tmux 패널, fzf 검색, resume/삭제, Gemini 협업(collab_ask)",
-  "version": "2.3.2",
+  "version": "2.3.3",
   "author": {
     "name": "SOL Team"
   },

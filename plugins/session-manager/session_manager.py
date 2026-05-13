@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.3.2"
+VERSION = "2.3.3"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1108,33 +1108,6 @@ def install_cli() -> None:
         print(f'  ~/.zshrc 또는 ~/.bashrc에 추가: export PATH="$HOME/.local/bin:$PATH"')
 
     _check_and_install_deps()
-    _register_collab_mcp()
-
-
-def _register_collab_mcp() -> None:
-    """collab MCP 서버를 user scope로 자동 등록."""
-    mcp_script = Path(__file__).resolve().parent / "collab_mcp.py"
-    if not mcp_script.exists():
-        return
-
-    # 이미 등록됐는지 확인
-    result = subprocess.run(
-        ["claude", "mcp", "list"],
-        capture_output=True, text=True,
-    )
-    if "collab:" in result.stdout:
-        print("  [collab MCP] 이미 등록됨")
-        return
-
-    reg = subprocess.run(
-        ["claude", "mcp", "add", "--scope", "user", "collab",
-         "python3", str(mcp_script)],
-        capture_output=True, text=True,
-    )
-    if reg.returncode == 0:
-        print(f"  [collab MCP] 등록 완료: {mcp_script.name}")
-    else:
-        print(f"  [collab MCP] 등록 실패: {reg.stderr.strip()[:100]}")
 
 
 def format_session_preview(session: dict, highlight: str = "") -> str:
