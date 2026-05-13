@@ -1,6 +1,6 @@
 ---
 name: session-manager
-description: AI 세션 브라우저. Claude/Gemini 세션 탐색, tmux 멀티슬롯, Gemini 협업(collab_ask MCP). "세션", "sessions", "resume", "세션 관리", "Gemini 협업" 키워드에서 활성화
+description: AI 세션 브라우저. Claude/Gemini 세션 탐색, tmux 멀티슬롯, fzf 검색, resume/삭제. "세션", "sessions", "resume", "세션 관리" 키워드에서 활성화
 ---
 
 # Session Manager (cs)
@@ -50,18 +50,6 @@ cs --version    # 버전 확인
 | `[D]` | Claude+Gemini 협업 페어 세션 |
 | `●` (녹색) | 현재 열린 슬롯 |
 | `●` (노란색) | 백그라운드 세션 |
-
-## Gemini 협업 (collab_ask MCP)
-
-설치 시 자동으로 등록되는 `collab` MCP 서버를 통해
-Claude Code 세션에서 Gemini에게 작업을 위임할 수 있습니다.
-
-Claude Code 안에서:
-```
-이 코드 Gemini에게 리뷰 맡겨줘
-```
-→ Claude가 `collab_ask(tool="gemini", message="...")` 자동 호출
-→ Gemini CLI가 잠깐 실행되고 응답 반환
 
 ## 의존성
 
