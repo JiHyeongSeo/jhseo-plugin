@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -389,7 +389,11 @@ def _tty_input(prompt: str) -> str:
             capture_output=True,
         )
         if tmp.exists():
-            value = tmp.read_text(encoding="utf-8").strip()
+            raw = tmp.read_bytes()
+            try:
+                value = raw.decode("utf-8").strip()
+            except UnicodeDecodeError:
+                value = raw.decode("cp949", errors="replace").strip()
             return value
         return ""
     except (OSError, FileNotFoundError):
