@@ -1324,13 +1324,7 @@ def _get_right_width(tmux_session: str) -> int:
 
 
 def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
-    """Enter: 선택한 세션을 슬롯에서 실행.
-
-    슬롯 0개: 슬롯 1 생성 (수평 분할)
-    슬롯 1개: 슬롯 1 교체 (기존 → background)
-    슬롯 2개: 1/2 텍스트 프롬프트 → 선택 슬롯 교체
-    이미 열린 세션: 해당 슬롯으로 포커스 이동
-    """
+    """Enter: 선택한 세션을 우측 고정 pane에서 실행 + yazi 프로젝트 경로 이동."""
     sessions: list[dict] = []
     if sessions_cache_path:
         try:
@@ -1342,132 +1336,28 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
 
     session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
-        # cache stale (새 세션) → 디스크에서 새로 로드 후 재시도
         sessions = load_all_sessions()
         session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
         return
 
-
     project_path = session.get("projectPath", "")
-    tmux_session = "claude-browser"
     work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
 
     state = _read_state()
-    bg_list: list[str] = state.get("background", [])
-
-    # 죽은 pane 자동 정리 (외부에서 Ctrl+C 등으로 pane이 종료된 경우)
-    live_pane_ids = _get_all_pane_ids(tmux_session)
-    slots: list[dict] = [s for s in state.get("slots", []) if s.get("pane_id", "") in live_pane_ids]
-    if slots != state.get("slots", []):
-        _write_state({"slots": slots, "background": bg_list})
-
-    # 이미 슬롯에 열린 세션이면 포커스만 이동
-    pane_title = get_display_summary(session)[:60]
-    for slot in slots:
-        if slot["session_id"] == session_id:
-            subprocess.run(["tmux", "set-option", "-p", "-t", slot["pane_id"], "@cs_title", pane_title])
-            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
-            return
-
-    # 슬롯 2개 → 선택 프롬프트
-    target_idx = 0
-    if len(slots) == 2:
-        chosen = _ask_target_slot(slots, sessions)
-        if chosen is None:
-            return
-        target_idx = chosen
-
-    # 타겟 슬롯의 기존 pane을 bg window로 보존
-    old_session_id = ""
-    if target_idx < len(slots):
-        old_slot = slots[target_idx]
-        old_pane_id = old_slot["pane_id"]
-        old_session_id = old_slot["session_id"]
-        subprocess.run([
-            "tmux", "break-pane", "-d",
-            "-s", old_pane_id,
-            "-n", old_session_id,
-        ])
-        # break-pane 실패 검증 — 여전히 존재하면 kill
-        if old_pane_id in _get_all_pane_ids(tmux_session):
-            subprocess.run(["tmux", "kill-pane", "-t", old_pane_id], capture_output=True)
-            old_session_id = ""  # bg 등록 취소
-        slots.pop(target_idx)
-
-    # bg 목록 갱신
-    if old_session_id and old_session_id not in bg_list:
-        bg_list.append(old_session_id)
-    bg_list = [s for s in bg_list if s != session_id]
-
-    # 대상 세션이 bg window에 있는지 확인
-    bg_window_idx = _find_bg_window_idx(session_id, tmux_session)
-    right_width = _get_right_width(tmux_session)
-
-    # 새 pane 생성 위치 결정 및 실행
-    new_pane_id = ""
-    if len(slots) == 0:
-        # 오른쪽에 슬롯 없음 → fzf 기준 수평 분할
-        fzf_pane = _get_fzf_pane_id(tmux_session)
-        if bg_window_idx is not None:
-            subprocess.run([
-                "tmux", "join-pane", "-h",
-                "-s", f"{tmux_session}:{bg_window_idx}",
-                "-t", fzf_pane,
-            ])
-            new_pane_id = _get_active_pane_id(tmux_session)
-            if new_pane_id:
-                subprocess.run(["tmux", "resize-pane", "-t", new_pane_id, "-x", str(right_width)])
-        else:
-            subprocess.run([
-                "tmux", "split-window", "-h", "-l", str(right_width),
-                "-t", fzf_pane, "-c", work_dir,
-                _resume_cmd(session),
-            ])
-            new_pane_id = _get_active_pane_id(tmux_session)
-
-    elif target_idx == 0:
-        # 위 슬롯 위치 → 남은 아래 슬롯(%ref) 위에 삽입
-        ref_pane_id = slots[0]["pane_id"]
-        if bg_window_idx is not None:
-            subprocess.run([
-                "tmux", "join-pane", "-v", "-b",
-                "-s", f"{tmux_session}:{bg_window_idx}",
-                "-t", ref_pane_id,
-            ])
-        else:
-            subprocess.run([
-                "tmux", "split-window", "-v", "-b",
-                "-t", ref_pane_id, "-c", work_dir,
-                _resume_cmd(session),
-            ])
-        new_pane_id = _get_active_pane_id(tmux_session)
-
-    else:
-        # 아래 슬롯 위치 → 남은 위 슬롯(%ref) 아래에 삽입
-        ref_pane_id = slots[0]["pane_id"]
-        if bg_window_idx is not None:
-            subprocess.run([
-                "tmux", "join-pane", "-v",
-                "-s", f"{tmux_session}:{bg_window_idx}",
-                "-t", ref_pane_id,
-            ])
-        else:
-            subprocess.run([
-                "tmux", "split-window", "-v",
-                "-t", ref_pane_id, "-c", work_dir,
-                _resume_cmd(session),
-            ])
-        new_pane_id = _get_active_pane_id(tmux_session)
-
-    if not new_pane_id:
+    claude_pane = state.get("claude_pane_id", "")
+    if not claude_pane:
         return
 
-    subprocess.run(["tmux", "set-option", "-p", "-t", new_pane_id, "@cs_title", pane_title])
-    # slots에 새 슬롯 삽입 (위치 유지)
-    slots.insert(target_idx, {"session_id": session_id, "pane_id": new_pane_id})
-    _write_state({"slots": slots, "background": bg_list})
-    subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
+    pane_title = get_display_summary(session)[:60]
+    subprocess.run([
+        "tmux", "respawn-pane", "-k", "-t", claude_pane, "-c", work_dir,
+        _resume_cmd(session),
+    ])
+    subprocess.run(["tmux", "set-option", "-p", "-t", claude_pane, "@cs_title", pane_title])
+
+    _write_state({**state, "right_session_id": session_id})
+    navigate_yazi(work_dir)
 
 
 def tmux_split_add(session_id: str, sessions_cache_path: str) -> None:
