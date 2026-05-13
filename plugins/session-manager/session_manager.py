@@ -1094,7 +1094,7 @@ def _install_yazi() -> bool:
 
 
 
-def navigate_yazi(project_path: str, tmux_session: str = "claude-browser") -> None:
+def navigate_yazi(project_path: str) -> None:
     """yazi pane을 project_path로 이동. yazi 재시작 방식."""
     state = _read_state()
     yazi_pane = state.get("yazi_pane_id", "")
