@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.3.5"
+VERSION = "2.3.6"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1104,8 +1104,25 @@ def _install_lazygit() -> bool:
         tmp_bin.unlink(missing_ok=True)
 
 
+def _find_git_repos(base_dir: str, max_depth: int = 3) -> list[str]:
+    """base_dir 하위의 git 레포지토리 목록 반환."""
+    try:
+        result = subprocess.run(
+            ["find", base_dir, "-maxdepth", str(max_depth),
+             "-name", ".git", "-type", "d",
+             "!", "-path", "*/.git/*"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return sorted(str(Path(p).parent) for p in result.stdout.strip().splitlines() if p)
+    except (subprocess.TimeoutExpired, OSError):
+        return []
+
+
 def tmux_open_lazygit(session_id: str, sessions_cache_path: str) -> None:
-    """Ctrl+G: 선택된 세션의 프로젝트 디렉터리에서 lazygit을 팝업으로 실행."""
+    """Ctrl+G: 선택된 세션의 프로젝트 디렉터리에서 lazygit을 팝업으로 실행.
+
+    projectPath가 git 레포가 아니면 하위 git 레포 목록을 fzf로 선택.
+    """
     # lazygit 설치 확인
     if not shutil.which("lazygit"):
         sys.stderr.write("\n  lazygit 미설치. 설치 중...\n")
@@ -1128,6 +1145,25 @@ def tmux_open_lazygit(session_id: str, sessions_cache_path: str) -> None:
     session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     project_path = session.get("projectPath", "") if session else ""
     work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
+
+    # projectPath 자체가 git 레포가 아니면 하위 레포 탐색
+    if not (Path(work_dir) / ".git").exists():
+        sub_repos = _find_git_repos(work_dir)
+        if len(sub_repos) == 1:
+            work_dir = sub_repos[0]
+        elif len(sub_repos) > 1:
+            # fzf로 레포 선택
+            rel_repos = [r.replace(work_dir + "/", "") for r in sub_repos]
+            pick = subprocess.run(
+                ["fzf", "--prompt", "git 레포 선택> ",
+                 "--height", "50%", "--reverse", "--border",
+                 "--header", f"하위 레포 {len(sub_repos)}개 | Enter:선택  Esc:취소"],
+                input="\n".join(rel_repos),
+                capture_output=True, text=True,
+            )
+            if pick.returncode != 0 or not pick.stdout.strip():
+                return
+            work_dir = str(Path(work_dir) / pick.stdout.strip())
 
     # tmux display-popup으로 플로팅 lazygit 실행
     subprocess.run([
