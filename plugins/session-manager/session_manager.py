@@ -1516,7 +1516,6 @@ def tmux_new_session(sessions_cache_path: str) -> None:
         elif "codex" in choice:
             selected_tool = "codex"
 
-    tmux_session = "claude-browser"
     state = _read_state()
     claude_pane = state.get("claude_pane_id", "")
     if not claude_pane:
