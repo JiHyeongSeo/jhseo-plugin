@@ -1518,70 +1518,20 @@ def tmux_new_session(sessions_cache_path: str) -> None:
 
     tmux_session = "claude-browser"
     state = _read_state()
-    bg_list: list[str] = state.get("background", [])
-    right_width = _get_right_width(tmux_session)
-
-    # 죽은 pane 자동 정리
-    live_pane_ids = _get_all_pane_ids(tmux_session)
-    slots: list[dict] = [s for s in state.get("slots", []) if s.get("pane_id", "") in live_pane_ids]
-    if slots != state.get("slots", []):
-        _write_state({"slots": slots, "background": bg_list})
-
-    target_idx = 0
-    if len(slots) == 2:
-        chosen = _ask_target_slot(slots, sessions)
-        if chosen is None:
-            return
-        target_idx = chosen
-
-    old_session_id = ""
-    if target_idx < len(slots):
-        old_slot = slots[target_idx]
-        old_pane_id = old_slot["pane_id"]
-        old_session_id = old_slot["session_id"]
-        subprocess.run([
-            "tmux", "break-pane", "-d",
-            "-s", old_pane_id,
-            "-n", old_session_id,
-        ])
-        if old_pane_id in _get_all_pane_ids(tmux_session):
-            subprocess.run(["tmux", "kill-pane", "-t", old_pane_id], capture_output=True)
-            old_session_id = ""
-        slots.pop(target_idx)
-
-    if old_session_id and old_session_id not in bg_list:
-        bg_list.append(old_session_id)
-
-    if len(slots) == 0:
-        fzf_pane = _get_fzf_pane_id(tmux_session)
-        subprocess.run([
-            "tmux", "split-window", "-h", "-l", str(right_width),
-            "-t", fzf_pane, "-c", selected_dir,
-            selected_tool,
-        ])
-    elif target_idx == 0:
-        ref_pane_id = slots[0]["pane_id"]
-        subprocess.run([
-            "tmux", "split-window", "-v", "-b",
-            "-t", ref_pane_id, "-c", selected_dir,
-            selected_tool,
-        ])
-    else:
-        ref_pane_id = slots[0]["pane_id"]
-        subprocess.run([
-            "tmux", "split-window", "-v",
-            "-t", ref_pane_id, "-c", selected_dir,
-            selected_tool,
-        ])
-
-    new_pane_id = _get_active_pane_id(tmux_session)
-    if not new_pane_id:
+    claude_pane = state.get("claude_pane_id", "")
+    if not claude_pane:
         return
 
-    # session_id는 빈 문자열 — 툴이 자체적으로 세션 생성
-    slots.insert(target_idx, {"session_id": "", "pane_id": new_pane_id})
-    _write_state({"slots": slots, "background": bg_list})
-    subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
+    subprocess.run([
+        "tmux", "respawn-pane", "-k", "-t", claude_pane, "-c", selected_dir,
+        selected_tool,
+    ])
+    subprocess.run([
+        "tmux", "set-option", "-p", "-t", claude_pane,
+        "@cs_title", f"New: {selected_dir.split('/')[-1]}",
+    ])
+    _write_state({**state, "right_session_id": ""})
+    navigate_yazi(selected_dir)
 
     # Gemini: 세션 파일 생성까지 대기 (최대 5초 폴링)
     if selected_tool == "gemini":
