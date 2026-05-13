@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.3.4"
+VERSION = "2.3.5"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1054,6 +1054,89 @@ def _check_and_install_deps() -> None:
         print("  ✗ rich 없음 (선택: --list 트리 뷰)")
         _try_install_rich()
 
+    if shutil.which("lazygit"):
+        print("  ✓ lazygit")
+    else:
+        print("  - lazygit 미설치 (선택: Ctrl+G git 현황)")
+        print("    설치: cs --install-lazygit")
+
+
+def _install_lazygit() -> bool:
+    """lazygit 최신 버전을 ~/.local/bin/ 에 다운로드 설치 (sudo 불필요)."""
+    import urllib.request
+    import tarfile as _tarfile
+
+    bin_dir = Path.home() / ".local" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    dest = bin_dir / "lazygit"
+
+    try:
+        print("  lazygit 최신 버전 확인 중...")
+        with urllib.request.urlopen(
+            "https://api.github.com/repos/jesseduffield/lazygit/releases/latest",
+            timeout=10,
+        ) as r:
+            version = json.loads(r.read()).get("tag_name", "").lstrip("v")
+    except Exception as e:
+        print(f"  버전 확인 실패: {e}")
+        return False
+
+    url = (
+        f"https://github.com/jesseduffield/lazygit/releases/latest/download/"
+        f"lazygit_{version}_Linux_x86_64.tar.gz"
+    )
+    tmp_tar = Path("/tmp/lazygit.tar.gz")
+    tmp_bin = Path("/tmp/lazygit")
+    try:
+        print(f"  lazygit v{version} 다운로드 중...")
+        urllib.request.urlretrieve(url, tmp_tar)
+        with _tarfile.open(tmp_tar) as tf:
+            tf.extract("lazygit", "/tmp")
+        tmp_bin.rename(dest)
+        os.chmod(dest, 0o755)
+        print(f"  ✓ lazygit v{version} 설치 완료: {dest}")
+        return True
+    except Exception as e:
+        print(f"  설치 실패: {e}")
+        return False
+    finally:
+        tmp_tar.unlink(missing_ok=True)
+        tmp_bin.unlink(missing_ok=True)
+
+
+def tmux_open_lazygit(session_id: str, sessions_cache_path: str) -> None:
+    """Ctrl+G: 선택된 세션의 프로젝트 디렉터리에서 lazygit을 팝업으로 실행."""
+    # lazygit 설치 확인
+    if not shutil.which("lazygit"):
+        sys.stderr.write("\n  lazygit 미설치. 설치 중...\n")
+        sys.stderr.flush()
+        if not _install_lazygit():
+            sys.stderr.write("  설치 실패. 수동으로 설치해주세요: https://github.com/jesseduffield/lazygit\n")
+            sys.stderr.flush()
+            return
+
+    # 세션 projectPath 조회
+    sessions: list[dict] = []
+    if sessions_cache_path:
+        try:
+            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not sessions:
+        sessions = load_all_sessions()
+
+    session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    project_path = session.get("projectPath", "") if session else ""
+    work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
+
+    # tmux display-popup으로 플로팅 lazygit 실행
+    subprocess.run([
+        "tmux", "display-popup",
+        "-E", "-w", "95%", "-h", "90%",
+        "-d", work_dir,
+        "lazygit",
+    ])
+
 
 def install_cli() -> None:
     script_path = Path(__file__).resolve()
@@ -1612,7 +1695,7 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     header = (
         "Enter:세션열기  Ctrl-S:화면분할  Ctrl-N:새세션  Ctrl-P:미리보기토글\n"
         "Tab:다중선택  Ctrl-D:삭제(다중)  Ctrl-T:제목편집  Ctrl-R:정렬토글\n"
-        "Ctrl-X:컨텍스트주입  Ctrl-F:파일열기  Ctrl-Z:detach  Ctrl-Q:종료"
+        "Ctrl-X:컨텍스트주입  Ctrl-F:파일열기  Ctrl-G:Git현황  Ctrl-Z:detach  Ctrl-Q:종료"
     )
 
     # reload 공통 접두어: 현재 query를 파일에 저장 후 서버사이드 필터링
@@ -1707,6 +1790,10 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
             ),
             # ctrl-f: 파일 검색 후 $EDITOR로 좌우 분할 새 pane에서 열기
             f"--bind=ctrl-f:execute(python3 {script_path} --fzf-open-file)",
+            (
+                f"--bind=ctrl-g:execute(python3 {script_path} --lazygit {{-1}}"
+                f" --sessions-cache {cache_file})"
+            ),
         ],
         input="\n".join(lines),
         text=True,
@@ -1899,6 +1986,8 @@ def main() -> None:
     parser.add_argument("--fzf-action", nargs="+", metavar=("ACTION", "SESSION_ID"), help=argparse.SUPPRESS)
     parser.add_argument("--fzf-inject-context", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--fzf-open-file", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--lazygit", metavar="SESSION_ID", help=argparse.SUPPRESS)
+    parser.add_argument("--install-lazygit", action="store_true", help="lazygit 설치")
     parser.add_argument("--highlight", nargs="*", default=[], help=argparse.SUPPRESS)
     parser.add_argument("--query-file", metavar="PATH", help=argparse.SUPPRESS)
     # tmux 내부 실행용
@@ -2050,6 +2139,14 @@ def main() -> None:
 
     if args.fzf_open_file:
         fzf_open_file()
+        return
+
+    if args.lazygit:
+        tmux_open_lazygit(args.lazygit, args.sessions_cache or "")
+        return
+
+    if args.install_lazygit:
+        _install_lazygit()
         return
 
     # fzf 액션: delete / edit-title
