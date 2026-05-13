@@ -1704,14 +1704,38 @@ def tmux_new_session(sessions_cache_path: str) -> None:
     _write_state({"slots": slots, "background": bg_list})
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
 
-    # Gemini: 세션 파일 생성까지 대기 (최대 5초 폴링)
+    # Gemini: 새 세션 파일 감지 → slot의 session_id 업데이트 (활성 표시용)
     if selected_tool == "gemini":
-        chats_before = set(GEMINI_DIR.glob("tmp/*/chats/session-*.json"))
-        for _ in range(10):
-            time.sleep(0.5)
-            chats_after = set(GEMINI_DIR.glob("tmp/*/chats/session-*.json"))
-            if chats_after - chats_before:
-                break
+        import threading
+
+        known_jsonl = {str(p) for p in GEMINI_DIR.glob("tmp/*/chats/session-*.jsonl")}
+        known_json = {str(p) for p in GEMINI_DIR.glob("tmp/*/chats/session-*.json")}
+        known = known_jsonl | known_json
+
+        def _update_gemini_slot() -> None:
+            for _ in range(60):  # 최대 30초
+                time.sleep(0.5)
+                current = {str(p) for p in GEMINI_DIR.glob("tmp/*/chats/session-*.jsonl")} | \
+                          {str(p) for p in GEMINI_DIR.glob("tmp/*/chats/session-*.json")}
+                new_files = current - known
+                if not new_files:
+                    continue
+                new_file = max((Path(p) for p in new_files), key=lambda p: p.stat().st_mtime)
+                try:
+                    for line in new_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                        obj = json.loads(line)
+                        if "sessionId" in obj:
+                            new_sid = obj["sessionId"]
+                            state = _read_state()
+                            for slot in state.get("slots", []):
+                                if slot.get("pane_id") == new_pane_id and slot.get("session_id") == "":
+                                    slot["session_id"] = new_sid
+                            _write_state(state)
+                            return
+                except (OSError, json.JSONDecodeError, StopIteration):
+                    pass
+
+        threading.Thread(target=_update_gemini_slot, daemon=True).start()
 
 
 def run_fzf_tmux(cache_file: str, query_file: str) -> None:
