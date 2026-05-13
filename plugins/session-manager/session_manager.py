@@ -1549,11 +1549,11 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format", " #{@cs_title} "])
 
     # 우측 30% → claude pane
-    subprocess.run(["tmux", "split-window", "-h", "-p", "30", "-t", f"{tmux_session}:0.0"])
+    subprocess.run(["tmux", "split-window", "-h", "-l", "30%", "-t", f"{tmux_session}:0.0"])
     claude_pane = _get_active_pane_id(tmux_session)
 
     # 좌측 하단 70% → yazi pane
-    subprocess.run(["tmux", "split-window", "-v", "-p", "70", "-t", f"{tmux_session}:0.0"])
+    subprocess.run(["tmux", "split-window", "-v", "-l", "70%", "-t", f"{tmux_session}:0.0"])
     yazi_pane = _get_active_pane_id(tmux_session)
 
     # pane ID 저장
