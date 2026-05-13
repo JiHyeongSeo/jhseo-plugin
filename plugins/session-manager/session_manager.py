@@ -1837,21 +1837,16 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
 
 
 def run_tmux_layout() -> None:
-    """tmux 레이아웃 실행.
+    """cs 기본 모드: 3-pane 워크스페이스 레이아웃.
 
     레이아웃:
-      [실행 전]
-      ┌────────────────────────────────────┐
-      │  fzf 세션 브라우저 (전체 화면)      │
-      └────────────────────────────────────┘
-
-      [Enter 후]
-      ┌──────────────────┬─────────────────┐
-      │  fzf 브라우저    │  claude 세션    │
-      │  (계속 실행)     │  (새로 열림)    │
-      └──────────────────┴─────────────────┘
-
-    cs 재실행 시 기존 tmux 세션 재attach.
+      ┌──────────────────────────────┬──────────────────┐
+      │  pane 0: fzf 세션목록        │  pane 2:         │
+      │  (상단 30%, 좌 70%)          │  Claude/Gemini   │
+      ├──────────────────────────────┤  (우 30%)        │
+      │  pane 1: yazi                │                  │
+      │  (하단 70%, 좌 70%)          │                  │
+      └──────────────────────────────┴──────────────────┘
     """
     if not shutil.which("tmux"):
         sys.exit("tmux가 필요합니다. sudo apt install tmux")
@@ -1859,7 +1854,7 @@ def run_tmux_layout() -> None:
     tmux_session = "claude-browser"
     script_path = Path(__file__).resolve()
 
-    # 이미 실행 중이면 재attach — fzf pane(index 0)이 살아있을 때만
+    # 이미 실행 중이면 재attach
     if subprocess.run(
         ["tmux", "has-session", "-t", tmux_session], capture_output=True
     ).returncode == 0:
@@ -1873,37 +1868,50 @@ def run_tmux_layout() -> None:
             else:
                 subprocess.run(["tmux", "attach-session", "-t", tmux_session])
             return
-        # fzf pane이 죽은 상태 → 세션 제거 후 재시작
         subprocess.run(["tmux", "kill-session", "-t", tmux_session], capture_output=True)
 
     cache_file = "/tmp/claude-browser-cache.json"
     query_file = "/tmp/claude-browser-query.txt"
     Path(query_file).write_text("", encoding="utf-8")
-    # 새 세션 시작 시 상태 초기화 (이전 실행의 stale 데이터 제거)
-    _write_state({"slots": [], "background": []})
+    _write_state({})
 
-    # tmux 세션 생성 (detached)
+    # 세션 생성
     subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session])
-    # 마우스 활성화: 스크롤 시 copy mode 진입 (claude 대화 내용 스크롤 가능)
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "mouse", "on"])
-    # pane 상단에 세션 제목 표시
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
-    subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
-                    " #{@cs_title} "])
-    # 왼쪽 fzf pane 타이틀
-    subprocess.run(["tmux", "set-option", "-p", "-t", f"{tmux_session}:0.0", "@cs_title", "cs"])
+    subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format", " #{@cs_title} "])
 
-    # fzf 브라우저 실행 — 오류 시 메시지 표시 후 Enter 대기, 정상 종료 시 detach
+    # 우측 30% → claude pane
+    subprocess.run(["tmux", "split-window", "-h", "-p", "30", "-t", f"{tmux_session}:0.0"])
+    claude_pane = _get_active_pane_id(tmux_session)
+
+    # 좌측 하단 70% → yazi pane
+    subprocess.run(["tmux", "split-window", "-v", "-p", "70", "-t", f"{tmux_session}:0.0"])
+    yazi_pane = _get_active_pane_id(tmux_session)
+
+    # pane ID 저장
+    _write_state({"yazi_pane_id": yazi_pane, "claude_pane_id": claude_pane, "right_session_id": ""})
+
+    # 타이틀 설정
+    subprocess.run(["tmux", "set-option", "-p", "-t", f"{tmux_session}:0.0", "@cs_title", "cs"])
+    subprocess.run(["tmux", "set-option", "-p", "-t", yazi_pane, "@cs_title", "files"])
+    subprocess.run(["tmux", "set-option", "-p", "-t", claude_pane, "@cs_title", "claude"])
+
+    # yazi 시작 (하단 pane)
+    yazi_bin = shutil.which("yazi") or "yazi"
+    subprocess.run(["tmux", "send-keys", "-t", yazi_pane, yazi_bin, "Enter"])
+
+    # fzf 브라우저 시작 (좌상단 pane)
     browser_cmd = (
         f"stty -ixon; python3 {script_path} --tmux-browser"
         f" --sessions-cache {cache_file}"
         f" --query-file {query_file}"
-        f" || (echo ''; echo '[cs 오류] 위 메시지를 확인하세요. Enter로 종료...'; read _)"
+        f" || (echo ''; echo '[cs 오류] Enter로 종료...'; read _)"
         f"; tmux detach-client 2>/dev/null"
     )
-    subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0", browser_cmd, "Enter"])
+    subprocess.run(["tmux", "select-pane", "-t", f"{tmux_session}:0.0"])
+    subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0.0", browser_cmd, "Enter"])
 
-    # 이미 tmux 안에 있으면 switch-client, 아니면 attach-session
     if os.environ.get("TMUX"):
         subprocess.run(["tmux", "switch-client", "-t", tmux_session])
     else:
