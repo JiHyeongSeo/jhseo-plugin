@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.3.3"
+VERSION = "2.3.4"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -377,13 +377,34 @@ def clean_summary(text: str) -> str:
 
 
 def _tty_input(prompt: str) -> str:
+    """입력 프롬프트. tmux popup 우선, 실패 시 /dev/tty fallback."""
+    import tempfile as _tempfile
+    tmp = Path(_tempfile.mkstemp(suffix=".cs-input.txt")[1])
+    try:
+        # tmux popup: 플로팅 창에서 입력
+        escaped = prompt.replace("'", "'\\''")
+        subprocess.run(
+            ["tmux", "display-popup", "-E",
+             f"printf '{escaped}' && read -r _cs_title && printf '%s' \"$_cs_title\" > {tmp}"],
+            capture_output=True,
+        )
+        if tmp.exists():
+            value = tmp.read_text(encoding="utf-8").strip()
+            return value
+        return ""
+    except (OSError, FileNotFoundError):
+        pass
+    finally:
+        tmp.unlink(missing_ok=True)
+
+    # fallback: /dev/tty
     try:
         with open("/dev/tty", "r") as tty:
-            sys.stderr.write("\033[2J\033[H" + prompt)
+            sys.stderr.write(prompt)
             sys.stderr.flush()
             return tty.readline().rstrip("\n")
     except (OSError, EOFError):
-        return input(prompt)
+        return ""
     except KeyboardInterrupt:
         return ""
 
