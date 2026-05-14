@@ -1,7 +1,8 @@
--- cs 단축키 가이드를 status line에 표시
+-- cs 단축키 가이드를 status line 중앙에 표시
+-- order: 기존 LEFT 항목들(mode=1000, size=2000, name=3000) 이후에 오도록 큰 값 사용
 Status:children_add(function()
     return ui.Line({
-        ui.Span(" "),
+        ui.Span("  "),
         ui.Span("^S"):fg("yellow"):bold(),
         ui.Span(":세션 "),
         ui.Span("^N"):fg("yellow"):bold(),
@@ -13,8 +14,6 @@ Status:children_add(function()
         ui.Span("^F"):fg("yellow"):bold(),
         ui.Span(":찾기 "),
         ui.Span("^Q"):fg("yellow"):bold(),
-        ui.Span(":종료 "),
-        ui.Span("^Z"):fg("yellow"):bold(),
-        ui.Span(":detach"),
+        ui.Span(":종료"),
     })
-end, 500, Status.LEFT)
+end, 8000, Status.LEFT)
