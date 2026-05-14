@@ -385,12 +385,35 @@ class TestLoadAllSessionsWithJsonl:
         assert result[0]["sessionId"] == "s1"
 
 
+class TestGetAllPaneIds:
+    def test_returns_pane_ids(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = 0
+                stdout = "%10\n%23\n%24\n"
+            return R()
+        monkeypatch.setattr(session_manager.subprocess, "run", fake_run)
+        result = session_manager._get_all_pane_ids("claude-browser")
+        assert result == {"%10", "%23", "%24"}
+
+    def test_returns_empty_on_error(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            class R:
+                returncode = 1
+                stdout = ""
+            return R()
+        monkeypatch.setattr(session_manager.subprocess, "run", fake_run)
+        result = session_manager._get_all_pane_ids("claude-browser")
+        assert result == set()
+
+
 class TestReadStateNewFormat:
     def test_default_has_slots_list(self, tmp_path, monkeypatch):
-        # 스키마 단순화: 파일 없을 때 빈 dict 반환 (Task 1)
         monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
         result = session_manager._read_state()
-        assert result == {}
+        assert "slots" in result
+        assert result["slots"] == []
+        assert result["background"] == []
 
     def test_reads_slots_format(self, tmp_path, monkeypatch):
         state_file = tmp_path / "state.json"
@@ -399,6 +422,69 @@ class TestReadStateNewFormat:
         result = session_manager._read_state()
         assert result["slots"][0]["session_id"] == "abc"
         assert result["slots"][0]["pane_id"] == "%23"
+
+
+class TestGetTmuxOpenSessionsNewFormat:
+    def _make_run(self, pane_ids="", window_names="", returncode=0):
+        calls = []
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            class R:
+                pass
+            r = R()
+            r.returncode = returncode
+            if "list-panes" in cmd:
+                r.stdout = pane_ids
+            else:
+                r.stdout = window_names
+            return r
+        return fake_run, calls
+
+    def test_returns_slot_ids_from_valid_panes(self, monkeypatch, tmp_path):
+        state_file = tmp_path / "state.json"
+        import json
+        state_file.write_text(json.dumps({
+            "slots": [
+                {"session_id": "sess-a", "pane_id": "%23"},
+                {"session_id": "sess-b", "pane_id": "%24"},
+            ],
+            "background": [],
+        }))
+        monkeypatch.setattr(session_manager, "_STATE_FILE", state_file)
+        fake, _ = self._make_run(pane_ids="%10\n%23\n%24\n")
+        monkeypatch.setattr(session_manager.subprocess, "run", fake)
+        slot_ids, bg_ids = session_manager.get_tmux_open_sessions("claude-browser")
+        assert slot_ids == {"sess-a", "sess-b"}
+        assert bg_ids == set()
+
+    def test_excludes_slot_with_missing_pane(self, monkeypatch, tmp_path):
+        state_file = tmp_path / "state.json"
+        import json
+        state_file.write_text(json.dumps({
+            "slots": [
+                {"session_id": "sess-a", "pane_id": "%23"},
+                {"session_id": "sess-b", "pane_id": "%99"},  # 없는 pane
+            ],
+            "background": [],
+        }))
+        monkeypatch.setattr(session_manager, "_STATE_FILE", state_file)
+        fake, _ = self._make_run(pane_ids="%10\n%23\n")
+        monkeypatch.setattr(session_manager.subprocess, "run", fake)
+        slot_ids, bg_ids = session_manager.get_tmux_open_sessions("claude-browser")
+        assert slot_ids == {"sess-a"}
+
+    def test_returns_bg_sessions_from_windows(self, monkeypatch, tmp_path):
+        state_file = tmp_path / "state.json"
+        import json
+        state_file.write_text(json.dumps({
+            "slots": [],
+            "background": ["sess-c"],
+        }))
+        monkeypatch.setattr(session_manager, "_STATE_FILE", state_file)
+        fake, _ = self._make_run(pane_ids="%10\n", window_names="0 main\n1 sess-c\n")
+        monkeypatch.setattr(session_manager.subprocess, "run", fake)
+        slot_ids, bg_ids = session_manager.get_tmux_open_sessions("claude-browser")
+        assert bg_ids == {"sess-c"}
 
 
 class TestFormatSessionLineNewSignature:
@@ -426,59 +512,48 @@ class TestFormatSessionLineNewSignature:
         assert plain.split()[-1] == "abc-444"
 
 
-class TestNewState:
-    def test_read_state_default_empty(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
-        assert session_manager._read_state() == {}
+class TestAskTargetSlot:
+    def _make_slots(self):
+        return [
+            {"session_id": "sess-a", "pane_id": "%23"},
+            {"session_id": "sess-b", "pane_id": "%24"},
+        ]
 
-    def test_write_read_state_roundtrip(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
-        state = {"right_session_id": "abc", "yazi_pane_id": "%5", "claude_pane_id": "%6"}
-        session_manager._write_state(state)
-        assert session_manager._read_state() == state
+    def _make_sessions(self):
+        return [
+            make_session("sess-a"),
+            make_session("sess-b"),
+        ]
 
+    def test_returns_0_when_user_enters_1(self, monkeypatch):
+        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "1")
+        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
+        assert result == 0
 
-class TestNavigateYazi:
-    def test_navigate_valid_path(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
-        session_manager._write_state({"yazi_pane_id": "%99"})
-        calls = []
-        monkeypatch.setattr(session_manager.subprocess, "run", lambda *a, **kw: calls.append(a[0]))
-        monkeypatch.setattr(session_manager.time, "sleep", lambda _: None)
-        session_manager.navigate_yazi(str(tmp_path))
-        assert any("q" in c for c in calls)
-        assert any(str(tmp_path) in " ".join(c) for c in calls)
+    def test_returns_1_when_user_enters_2(self, monkeypatch):
+        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "2")
+        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
+        assert result == 1
 
-    def test_navigate_invalid_path_uses_home(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
-        session_manager._write_state({"yazi_pane_id": "%99"})
-        calls = []
-        monkeypatch.setattr(session_manager.subprocess, "run", lambda *a, **kw: calls.append(a[0]))
-        monkeypatch.setattr(session_manager.time, "sleep", lambda _: None)
-        session_manager.navigate_yazi("/nonexistent/path/xyz")
-        home = str(Path.home())
-        assert any(home in " ".join(c) for c in calls)
+    def test_returns_none_on_invalid_input(self, monkeypatch):
+        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "x")
+        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
+        assert result is None
 
-    def test_navigate_no_pane_id_noop(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
-        session_manager._write_state({})
-        calls = []
-        monkeypatch.setattr(session_manager.subprocess, "run", lambda *a, **kw: calls.append(a[0]))
-        session_manager.navigate_yazi(str(tmp_path))
-        assert calls == []
+    def test_returns_none_on_empty_input(self, monkeypatch):
+        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "")
+        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
+        assert result is None
 
+    def test_returns_none_on_out_of_range(self, monkeypatch):
+        monkeypatch.setattr(session_manager, "_tty_input", lambda prompt: "3")
+        result = session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
+        assert result is None
 
-class TestGetTmuxOpenSessionsNew:
-    def test_returns_right_session_from_state(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
-        session_manager._write_state({"right_session_id": "abc-123"})
-        slot_ids, bg_ids = session_manager.get_tmux_open_sessions()
-        assert slot_ids == {"abc-123"}
-        assert bg_ids == set()
-
-    def test_returns_empty_when_no_right_session(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(session_manager, "_STATE_FILE", tmp_path / "state.json")
-        session_manager._write_state({})
-        slot_ids, bg_ids = session_manager.get_tmux_open_sessions()
-        assert slot_ids == set()
-        assert bg_ids == set()
+    def test_prompt_contains_slot_summaries(self, monkeypatch):
+        prompts = []
+        monkeypatch.setattr(session_manager, "_tty_input", lambda p: prompts.append(p) or "")
+        session_manager._ask_target_slot(self._make_slots(), self._make_sessions())
+        assert len(prompts) == 1
+        assert "위" in prompts[0]
+        assert "아래" in prompts[0]

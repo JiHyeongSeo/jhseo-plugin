@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "2.4.7"
+VERSION = "3.0.0"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -473,7 +473,12 @@ def _read_state() -> dict:
 
 
 def _write_state(state: dict) -> None:
-    _STATE_FILE.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    try:
+        existing = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        existing = {}
+    merged = {**existing, **state}
+    _STATE_FILE.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
 
 
 def _get_all_pane_ids(tmux_session: str) -> set[str]:
@@ -514,6 +519,117 @@ def _find_bg_window_idx(session_id: str, tmux_session: str) -> str | None:
         return None
     for line in win_result.stdout.strip().split("\n"):
         parts = line.strip().split(" ", 1)
+        if len(parts) == 2 and parts[1] == session_id:
+            return parts[0]
+    return None
+
+
+def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
+    """v3.0.0: yazi의 현재 디렉터리에서 새 세션을 우측 pane에서 시작.
+
+    기존 우측 세션은 break-pane으로 background에 보존.
+    """
+    if not work_dir or not Path(work_dir).is_dir():
+        return
+
+    tmux_session = "claude-browser"
+
+    # 도구 선택
+    if not tool:
+        avail = []
+        if shutil.which("claude"):
+            avail.append(("Claude", "claude"))
+        if shutil.which("gemini"):
+            avail.append(("Gemini", "gemini"))
+        if shutil.which("codex"):
+            avail.append(("Codex", "codex"))
+        if not avail:
+            return
+        if len(avail) == 1:
+            tool = avail[0][1]
+        else:
+            r = subprocess.run(
+                ["fzf", "--prompt", "도구 선택: ", "--height", "40%", "--reverse", "--border"],
+                input="\n".join(f"{name}  ({cmd})" for name, cmd in avail),
+                capture_output=True, text=True,
+            )
+            if r.returncode != 0:
+                return
+            sel = r.stdout.strip().lower()
+            tool = "claude"
+            for name, cmd in avail:
+                if name.lower() in sel:
+                    tool = cmd
+                    break
+
+    state = _read_state()
+    right_pane = state.get("right_pane_id", "")
+    yazi_pane = state.get("yazi_pane_id", "")
+    current_session_id = state.get("right_session_id", "")
+    bg_sessions: dict = state.get("bg_sessions", {})
+    live_panes = _get_all_pane_ids(tmux_session)
+
+    # 기존 세션 보존
+    if right_pane and right_pane in live_panes and current_session_id:
+        r = subprocess.run([
+            "tmux", "break-pane", "-d", "-s", right_pane, "-n", current_session_id,
+        ], capture_output=True)
+        if r.returncode == 0:
+            bg_sessions[current_session_id] = current_session_id
+        right_pane = ""
+        live_panes = _get_all_pane_ids(tmux_session)
+
+    try:
+        win_w = int(subprocess.run(
+            ["tmux", "display-message", "-p", "#{window_width}"],
+            capture_output=True, text=True,
+        ).stdout.strip())
+    except ValueError:
+        win_w = 220
+    right_w = int(win_w * 0.50)
+
+    if right_pane and right_pane in live_panes:
+        # 빈 right_pane 재사용
+        subprocess.run([
+            "tmux", "respawn-pane", "-k", "-t", right_pane,
+            "-c", work_dir, tool,
+        ])
+        new_pane = right_pane
+    else:
+        if not yazi_pane or yazi_pane not in live_panes:
+            return
+        r = subprocess.run([
+            "tmux", "split-window", "-h", "-l", str(right_w),
+            "-P", "-F", "#{pane_id}",
+            "-t", yazi_pane, "-c", work_dir, tool,
+        ], capture_output=True, text=True)
+        new_pane = r.stdout.strip()
+        if not new_pane:
+            return
+
+    subprocess.run(["tmux", "set-option", "-p", "-t", new_pane, "@cs_title", f"{tool} (새 세션)"])
+    _write_state({
+        "right_pane_id": new_pane,
+        "right_session_id": "",
+        "yazi_pane_id": yazi_pane,
+        "bg_sessions": bg_sessions,
+        "slots": [],
+        "background": list(bg_sessions.keys()),
+    })
+
+    # yazi 디렉터리 이동은 호출 스크립트에서 `ya emit cd` 로 처리 (yazi --block 회피)
+    subprocess.run(["tmux", "select-pane", "-t", new_pane])
+
+
+def _find_bg_window_name(session_id: str, tmux_session: str) -> str | None:
+    """session_id 이름의 background window index 반환. 없으면 None."""
+    result = subprocess.run(
+        ["tmux", "list-windows", "-t", tmux_session,
+         "-F", "#{window_index}:#{window_name}"],
+        capture_output=True, text=True,
+    )
+    for line in result.stdout.strip().splitlines():
+        parts = line.split(":", 1)
         if len(parts) == 2 and parts[1] == session_id:
             return parts[0]
     return None
@@ -653,35 +769,34 @@ def fzf_inject_context(source_session_id: str, sessions_cache_path: str) -> None
 
 
 def get_tmux_open_sessions(tmux_session: str = "claude-browser") -> tuple[set[str], set[str]]:
-    """상태 파일 + tmux 실제 상태로 열린 세션 목록 반환.
-
-    Returns:
-        (slot_session_ids, background_session_ids)
-        slot_session_ids: 현재 pane에 열린 세션 (초록 표시)
-        background_session_ids: bg window에 보존된 세션 (노랑 표시)
-    """
+    """상태 파일 + tmux 실제 상태로 열린 세션 목록 반환."""
     state = _read_state()
-    slots: list[dict] = state.get("slots", [])
-    bg_list: list[str] = state.get("background", [])
-
     all_pane_ids = _get_all_pane_ids(tmux_session)
-    slot_ids = {
-        slot["session_id"]
-        for slot in slots
-        if slot.get("pane_id", "") in all_pane_ids
-    }
 
-    bg_sessions: set[str] = set()
-    if bg_list:
+    right_pane = state.get("right_pane_id", "")
+    right_session = state.get("right_session_id", "")
+    bg_sessions_dict: dict = state.get("bg_sessions", {})
+
+    slot_ids: set[str] = set()
+    if right_pane and right_pane in all_pane_ids and right_session:
+        slot_ids.add(right_session)
+    for slot in state.get("slots", []):
+        if slot.get("pane_id", "") in all_pane_ids:
+            slot_ids.add(slot["session_id"])
+
+    bg_session_ids: set[str] = set()
+    if bg_sessions_dict:
         win_result = subprocess.run(
             ["tmux", "list-windows", "-t", tmux_session, "-F", "#{window_name}"],
             capture_output=True, text=True,
         )
         if win_result.returncode == 0:
-            window_names = set(win_result.stdout.split())
-            bg_sessions = {s for s in bg_list if s in window_names}
+            live_win_names = set(win_result.stdout.split())
+            bg_session_ids = {sid for sid in bg_sessions_dict if sid in live_win_names}
+    for sid in state.get("background", []):
+        bg_session_ids.add(sid)
 
-    return slot_ids, bg_sessions
+    return slot_ids, bg_session_ids
 
 
 def format_session_line(
@@ -1195,7 +1310,50 @@ def install_cli() -> None:
         print(f"\n  주의: {bin_dir} 이 PATH에 없습니다.")
         print(f'  ~/.zshrc 또는 ~/.bashrc에 추가: export PATH="$HOME/.local/bin:$PATH"')
 
+    _install_yazi_configs()
     _check_and_install_deps()
+
+
+def _install_yazi_configs() -> None:
+    """플러그인의 yazi-config/ 디렉터리를 ~/.config/yazi/ 에 설치."""
+    src_dir = Path(__file__).resolve().parent / "yazi-config"
+    if not src_dir.is_dir():
+        return
+    dst_dir = Path.home() / ".config" / "yazi"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    # 백업 디렉터리
+    backup_dir = dst_dir / ".cs-backup"
+    installed = []
+    for src_file in src_dir.iterdir():
+        if not src_file.is_file():
+            continue
+        dst_file = dst_dir / src_file.name
+        # 기존 파일이 다르면 백업
+        if dst_file.exists():
+            try:
+                if dst_file.read_bytes() == src_file.read_bytes():
+                    continue  # 동일하면 skip
+            except OSError:
+                pass
+            backup_dir.mkdir(exist_ok=True)
+            backup_file = backup_dir / src_file.name
+            try:
+                backup_file.write_bytes(dst_file.read_bytes())
+            except OSError:
+                pass
+        try:
+            dst_file.write_bytes(src_file.read_bytes())
+            if src_file.suffix == ".sh":
+                os.chmod(dst_file, 0o755)
+            installed.append(src_file.name)
+        except OSError as e:
+            print(f"  yazi config 설치 실패 {src_file.name}: {e}")
+
+    if installed:
+        print(f"  yazi 설정 설치: {', '.join(installed)}")
+        if backup_dir.exists():
+            print(f"  기존 설정 백업: {backup_dir}")
 
 
 
@@ -1237,12 +1395,11 @@ def _get_right_width(tmux_session: str) -> int:
 
 
 def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
-    """Enter: 선택한 세션을 슬롯에서 실행.
+    """Enter: 4-pane IDE 레이아웃에서 세션을 우측 Claude pane에서 실행.
 
-    슬롯 0개: 슬롯 1 생성 (수평 분할)
-    슬롯 1개: 슬롯 1 교체 (기존 → background)
-    슬롯 2개: 1/2 텍스트 프롬프트 → 선택 슬롯 교체
-    이미 열린 세션: 해당 슬롯으로 포커스 이동
+    - 첫 열기: right_pane respawn
+    - 세션 전환: 현재 break-pane(bg보존) + center에서 새 right pane + 새 세션
+    - 이전 세션 복귀: break-pane 현재 + join-pane 이전 세션
     """
     sessions: list[dict] = []
     if sessions_cache_path:
@@ -1255,131 +1412,114 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
 
     session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
-        # cache stale (새 세션) → 디스크에서 새로 로드 후 재시도
         sessions = load_all_sessions()
         session = next((s for s in sessions if s.get("sessionId") == session_id), None)
     if not session:
         return
 
-
     project_path = session.get("projectPath", "")
     tmux_session = "claude-browser"
     work_dir = project_path if project_path and Path(project_path).is_dir() else str(Path.home())
+    pane_title = get_display_summary(session)[:60]
 
     state = _read_state()
-    bg_list: list[str] = state.get("background", [])
+    right_pane = state.get("right_pane_id", "")
+    current_session_id = state.get("right_session_id", "")
+    bg_sessions: dict = state.get("bg_sessions", {})
 
-    # 죽은 pane 자동 정리 (외부에서 Ctrl+C 등으로 pane이 종료된 경우)
-    live_pane_ids = _get_all_pane_ids(tmux_session)
-    slots: list[dict] = [s for s in state.get("slots", []) if s.get("pane_id", "") in live_pane_ids]
-    if slots != state.get("slots", []):
-        _write_state({"slots": slots, "background": bg_list})
+    # 이미 열린 세션 → 포커스만
+    if current_session_id == session_id and right_pane in _get_all_pane_ids(tmux_session):
+        subprocess.run(["tmux", "set-option", "-p", "-t", right_pane, "@cs_title", pane_title])
+        subprocess.run(["tmux", "select-pane", "-t", right_pane])
+        return
 
-    # 이미 슬롯에 열린 세션이면 포커스만 이동
-    pane_title = get_display_summary(session)[:60]
-    for slot in slots:
-        if slot["session_id"] == session_id:
-            subprocess.run(["tmux", "set-option", "-p", "-t", slot["pane_id"], "@cs_title", pane_title])
-            subprocess.run(["tmux", "select-pane", "-t", slot["pane_id"]])
-            return
-
-    # 슬롯 2개 → 선택 프롬프트
-    target_idx = 0
-    if len(slots) == 2:
-        chosen = _ask_target_slot(slots, sessions)
-        if chosen is None:
-            return
-        target_idx = chosen
-
-    # 타겟 슬롯의 기존 pane을 bg window로 보존
-    old_session_id = ""
-    if target_idx < len(slots):
-        old_slot = slots[target_idx]
-        old_pane_id = old_slot["pane_id"]
-        old_session_id = old_slot["session_id"]
-        subprocess.run([
+    # right_pane이 살아있고 세션이 있으면 background로 보존
+    live_panes = _get_all_pane_ids(tmux_session)
+    if right_pane and right_pane in live_panes and current_session_id:
+        r = subprocess.run([
             "tmux", "break-pane", "-d",
-            "-s", old_pane_id,
-            "-n", old_session_id,
-        ])
-        # break-pane 실패 검증 — 여전히 존재하면 kill
-        if old_pane_id in _get_all_pane_ids(tmux_session):
-            subprocess.run(["tmux", "kill-pane", "-t", old_pane_id], capture_output=True)
-            old_session_id = ""  # bg 등록 취소
-        slots.pop(target_idx)
+            "-s", right_pane,
+            "-n", current_session_id,
+        ], capture_output=True)
+        if r.returncode == 0:
+            bg_sessions[current_session_id] = current_session_id
+        right_pane = ""
 
-    # bg 목록 갱신
-    if old_session_id and old_session_id not in bg_list:
-        bg_list.append(old_session_id)
-    bg_list = [s for s in bg_list if s != session_id]
+    # 너비 계산
+    try:
+        win_w = int(subprocess.run(
+            ["tmux", "display-message", "-p", "#{window_width}"],
+            capture_output=True, text=True,
+        ).stdout.strip())
+    except ValueError:
+        win_w = 220
+    right_w = int(win_w * 0.50)
+    yazi_pane = state.get("yazi_pane_id", "")
 
-    # 대상 세션이 bg window에 있는지 확인
-    bg_window_idx = _find_bg_window_idx(session_id, tmux_session)
-    right_width = _get_right_width(tmux_session)
-
-    # 새 pane 생성 위치 결정 및 실행
     new_pane_id = ""
-    if len(slots) == 0:
-        # 오른쪽에 슬롯 없음 → fzf 기준 수평 분할
-        fzf_pane = _get_fzf_pane_id(tmux_session)
-        if bg_window_idx is not None:
-            subprocess.run([
-                "tmux", "join-pane", "-h",
-                "-s", f"{tmux_session}:{bg_window_idx}",
-                "-t", fzf_pane,
-            ])
-            new_pane_id = _get_active_pane_id(tmux_session)
-            if new_pane_id:
-                subprocess.run(["tmux", "resize-pane", "-t", new_pane_id, "-x", str(right_width)])
-        else:
-            subprocess.run([
-                "tmux", "split-window", "-h", "-l", str(right_width),
-                "-t", fzf_pane, "-c", work_dir,
-                _resume_cmd(session),
-            ])
-            new_pane_id = _get_active_pane_id(tmux_session)
 
-    elif target_idx == 0:
-        # 위 슬롯 위치 → 남은 아래 슬롯(%ref) 위에 삽입
-        ref_pane_id = slots[0]["pane_id"]
-        if bg_window_idx is not None:
-            subprocess.run([
-                "tmux", "join-pane", "-v", "-b",
-                "-s", f"{tmux_session}:{bg_window_idx}",
-                "-t", ref_pane_id,
-            ])
+    # bg에 있는 세션 복귀
+    if session_id in bg_sessions:
+        bg_win_idx = _find_bg_window_name(session_id, tmux_session)
+        if bg_win_idx is not None:
+            ref = yazi_pane if yazi_pane and yazi_pane in _get_all_pane_ids(tmux_session) else ""
+            if ref:
+                subprocess.run([
+                    "tmux", "join-pane", "-h", "-l", str(right_w),
+                    "-s", f"{tmux_session}:{bg_win_idx}.0",
+                    "-t", ref,
+                ])
+                new_pane_id = _get_active_pane_id(tmux_session)
+                del bg_sessions[session_id]
+            else:
+                bg_sessions.pop(session_id, None)
         else:
-            subprocess.run([
-                "tmux", "split-window", "-v", "-b",
-                "-t", ref_pane_id, "-c", work_dir,
-                _resume_cmd(session),
-            ])
-        new_pane_id = _get_active_pane_id(tmux_session)
+            bg_sessions.pop(session_id, None)
 
-    else:
-        # 아래 슬롯 위치 → 남은 위 슬롯(%ref) 아래에 삽입
-        ref_pane_id = slots[0]["pane_id"]
-        if bg_window_idx is not None:
+    if not new_pane_id:
+        live_panes = _get_all_pane_ids(tmux_session)
+        if right_pane and right_pane in live_panes:
+            # right_pane 존재 → 그 자리에서 respawn
             subprocess.run([
-                "tmux", "join-pane", "-v",
-                "-s", f"{tmux_session}:{bg_window_idx}",
-                "-t", ref_pane_id,
+                "tmux", "respawn-pane", "-k", "-t", right_pane,
+                "-c", work_dir, _resume_cmd(session),
             ])
+            new_pane_id = right_pane
         else:
-            subprocess.run([
-                "tmux", "split-window", "-v",
-                "-t", ref_pane_id, "-c", work_dir,
+            # right_pane 없음 → yazi 기준으로 새 분할
+            if not yazi_pane or yazi_pane not in live_panes:
+                return
+            r = subprocess.run([
+                "tmux", "split-window", "-h", "-l", str(right_w),
+                "-t", yazi_pane, "-c", work_dir,
                 _resume_cmd(session),
-            ])
-        new_pane_id = _get_active_pane_id(tmux_session)
+            ], capture_output=True)
+            if r.returncode != 0:
+                return
+            new_pane_id = _get_active_pane_id(tmux_session)
 
     if not new_pane_id:
         return
 
     subprocess.run(["tmux", "set-option", "-p", "-t", new_pane_id, "@cs_title", pane_title])
-    # slots에 새 슬롯 삽입 (위치 유지)
-    slots.insert(target_idx, {"session_id": session_id, "pane_id": new_pane_id})
-    _write_state({"slots": slots, "background": bg_list})
+
+    write_dict = {
+        "right_pane_id": new_pane_id,
+        "right_session_id": session_id,
+        "bg_sessions": bg_sessions,
+        "slots": [{"session_id": session_id, "pane_id": new_pane_id}],
+        "background": list(bg_sessions.keys()),
+    }
+    if yazi_pane:
+        write_dict["yazi_pane_id"] = yazi_pane
+    _write_state(write_dict)
+
+    # yazi가 살아있으면 ya emit cd 로 해당 디렉터리로 이동 (재시작 없이)
+    if yazi_pane and yazi_pane in _get_all_pane_ids(tmux_session):
+        ya_bin = shutil.which("ya")
+        if ya_bin:
+            subprocess.run([ya_bin, "emit", "cd", work_dir], capture_output=True)
+
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
 
 
@@ -1789,30 +1929,25 @@ def run_tmux_layout() -> None:
         sys.exit("tmux가 필요합니다. sudo apt install tmux")
 
     tmux_session = "claude-browser"
-    script_path = Path(__file__).resolve()
 
-    # 이미 실행 중이면 재attach — fzf pane(index 0)이 살아있을 때만
+    # 이미 실행 중이면 재attach
     if subprocess.run(
         ["tmux", "has-session", "-t", tmux_session], capture_output=True
     ).returncode == 0:
-        fzf_alive = subprocess.run(
+        panes_alive = subprocess.run(
             ["tmux", "list-panes", "-t", f"{tmux_session}:0", "-F", "#{pane_index}"],
             capture_output=True, text=True,
         ).stdout.strip().splitlines()
-        if "0" in fzf_alive:
+        if panes_alive:
             if os.environ.get("TMUX"):
                 subprocess.run(["tmux", "switch-client", "-t", tmux_session])
             else:
                 subprocess.run(["tmux", "attach-session", "-t", tmux_session])
             return
-        # fzf pane이 죽은 상태 → 세션 제거 후 재시작
         subprocess.run(["tmux", "kill-session", "-t", tmux_session], capture_output=True)
 
-    cache_file = "/tmp/claude-browser-cache.json"
-    query_file = "/tmp/claude-browser-query.txt"
-    Path(query_file).write_text("", encoding="utf-8")
-    # 새 세션 시작 시 상태 초기화 (이전 실행의 stale 데이터 제거)
-    _write_state({"slots": [], "background": []})
+    # 상태 초기화
+    _STATE_FILE.write_text(json.dumps({"slots": [], "background": [], "bg_sessions": {}}), encoding="utf-8")
 
     # tmux 세션 생성 (detached)
     subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session])
@@ -1822,20 +1957,51 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
                     " #{@cs_title} "])
-    # 왼쪽 fzf pane 타이틀
-    subprocess.run(["tmux", "set-option", "-p", "-t", f"{tmux_session}:0.0", "@cs_title", "cs"])
+    # ── 2-pane 레이아웃 (yazi + Claude) ───────────────────────────────────────
+    try:
+        win_w = int(subprocess.run(
+            ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0", "#{window_width}"],
+            capture_output=True, text=True,
+        ).stdout.strip())
+    except ValueError:
+        win_w = 220
+    right_w = int(win_w * 0.50)  # Claude pane 60%
 
-    # fzf 브라우저 실행 — 오류 시 메시지 표시 후 Enter 대기, 정상 종료 시 detach
-    browser_cmd = (
-        f"stty -ixon; python3 {script_path} --tmux-browser"
-        f" --sessions-cache {cache_file}"
-        f" --query-file {query_file}"
-        f" || (echo ''; echo '[cs 오류] 위 메시지를 확인하세요. Enter로 종료...'; read _)"
-        f"; tmux detach-client 2>/dev/null"
+    yazi_pane = subprocess.run(
+        ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0.0", "#{pane_id}"],
+        capture_output=True, text=True,
+    ).stdout.strip()
+
+    r = subprocess.run(
+        ["tmux", "split-window", "-h", "-l", str(right_w), "-t", yazi_pane,
+         "-P", "-F", "#{pane_id}"],
+        capture_output=True, text=True,
     )
-    subprocess.run(["tmux", "send-keys", "-t", f"{tmux_session}:0", browser_cmd, "Enter"])
+    right_pane = r.stdout.strip()
 
-    # 이미 tmux 안에 있으면 switch-client, 아니면 attach-session
+    subprocess.run(["tmux", "set-option", "-p", "-t", yazi_pane, "@cs_title", "yazi"])
+    subprocess.run(["tmux", "set-option", "-p", "-t", right_pane, "@cs_title", "claude"])
+
+    # 상태 저장 (먼저 저장 — yazi가 state 읽을 수 있도록)
+    _STATE_FILE.write_text(json.dumps({
+        "yazi_pane_id": yazi_pane,
+        "right_pane_id": right_pane,
+        "right_session_id": "",
+        "bg_sessions": {},
+        "slots": [],
+        "background": [],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    # yazi 시작 (좌측 pane)
+    if shutil.which("yazi"):
+        yazi_bin = shutil.which("yazi")
+        config_home = str(Path.home() / ".config" / "yazi")
+        subprocess.run([
+            "tmux", "send-keys", "-t", yazi_pane,
+            f"YAZI_CONFIG_HOME={config_home} {yazi_bin}", "Enter",
+        ])
+    subprocess.run(["tmux", "select-pane", "-t", yazi_pane])
+
     if os.environ.get("TMUX"):
         subprocess.run(["tmux", "switch-client", "-t", tmux_session])
     else:
@@ -1957,6 +2123,7 @@ def main() -> None:
     parser.add_argument("--tmux-split-open", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-split-add", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-new-session", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--tmux-new-session-at", metavar="DIR", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/cs 심링크 설치"
@@ -1975,6 +2142,10 @@ def main() -> None:
 
     if args.tmux_new_session:
         tmux_new_session(args.sessions_cache or "")
+        return
+
+    if args.tmux_new_session_at:
+        tmux_new_session_at(args.tmux_new_session_at)
         return
 
     # tmux 내부: fzf 브라우저 실행
