@@ -1,0 +1,13 @@
+[mgr]
+ratio = [1, 3, 4]
+show_hidden = true
+
+[opener]
+edit = [
+  { run = 'vi "$@"', desc = "Edit", block = true }
+]
+
+[open]
+append_rules = [
+  { mime = "*", use = "edit" }
+]
