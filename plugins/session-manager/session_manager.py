@@ -2024,164 +2024,6 @@ def run_fzf_tmux(cache_file: str, query_file: str) -> None:
     )
 
 
-_WATCHER_PID_FILE = Path("/tmp/cs-watcher.pid")
-
-
-def _start_session_watcher() -> None:
-    """백그라운드 세션 응답 완료 watcher 프로세스 시작."""
-    # 기존 watcher 종료
-    if _WATCHER_PID_FILE.exists():
-        try:
-            old_pid = int(_WATCHER_PID_FILE.read_text())
-            os.kill(old_pid, 15)  # SIGTERM
-        except (ValueError, ProcessLookupError, OSError):
-            pass
-
-    script = Path(__file__).resolve()
-    proc = subprocess.Popen(
-        ["python3", str(script), "--session-watcher"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    _WATCHER_PID_FILE.write_text(str(proc.pid))
-    _log("INFO", f"session watcher 시작 (PID={proc.pid})")
-
-
-def _run_session_watcher() -> None:
-    """bg 세션 .jsonl 파일 감시 → 새 assistant 메시지 시 tmux 알림.
-
-    cs 시작 시 별도 프로세스로 실행됨.
-    """
-    import signal
-
-    tmux_session = "claude-browser"
-    _WATCHER_PID_FILE.write_text(str(os.getpid()))
-
-    def _cleanup(sig: int, frame: object) -> None:
-        _WATCHER_PID_FILE.unlink(missing_ok=True)
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, _cleanup)
-    signal.signal(signal.SIGINT, _cleanup)
-
-    # 세션별 마지막 확인 줄 수 및 파일 크기
-    last_lines: dict[str, int] = {}
-    last_size: dict[str, int] = {}
-    # 세션 목록 캐시 (30초마다 갱신)
-    sessions_cache: list[dict] = []
-    sessions_last_load = 0.0
-
-    _log("INFO", "session watcher 루프 시작")
-
-    while True:
-        try:
-            # tmux 세션 살아있는지 확인
-            r = subprocess.run(
-                ["tmux", "has-session", "-t", tmux_session], capture_output=True
-            )
-            if r.returncode != 0:
-                break  # cs 종료됨
-
-            # 세션 목록 주기적 갱신 (30초)
-            now = time.time()
-            if now - sessions_last_load > 30:
-                sessions_cache = load_all_sessions()
-                sessions_last_load = now
-
-            # state 읽기
-            try:
-                state = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                time.sleep(2)
-                continue
-
-            bg_sessions: dict = state.get("bg_sessions", {})
-            if not bg_sessions:
-                time.sleep(2)
-                continue
-
-            session_map = {s.get("sessionId"): s for s in sessions_cache}
-
-            for sid in list(bg_sessions.keys()):
-                session = session_map.get(sid)
-                if not session:
-                    continue
-
-                full_path = session.get("fullPath", "")
-                if not full_path or not Path(full_path).exists():
-                    continue
-
-                # 파일 크기 빠른 체크
-                try:
-                    cur_size = Path(full_path).stat().st_size
-                except OSError:
-                    continue
-
-                if last_size.get(full_path, -1) == cur_size:
-                    continue
-                last_size[full_path] = cur_size
-
-                # 새 줄에서 assistant 메시지 확인
-                try:
-                    lines = Path(full_path).read_text(
-                        encoding="utf-8", errors="replace"
-                    ).splitlines()
-                except OSError:
-                    continue
-
-                prev = last_lines.get(sid, len(lines))
-                new_lines = lines[prev:]
-                last_lines[sid] = len(lines)
-
-                notified = False
-                for line in new_lines:
-                    if notified:
-                        break
-                    try:
-                        record = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if record.get("type") != "assistant":
-                        continue
-                    content = record.get("message", {}).get("content", [])
-                    has_text = False
-                    if isinstance(content, list):
-                        has_text = any(
-                            p.get("type") == "text" and p.get("text", "").strip()
-                            for p in content
-                            if isinstance(p, dict)
-                        )
-                    elif isinstance(content, str):
-                        has_text = bool(content.strip())
-                    if not has_text:
-                        continue
-
-                    # 알림 전송
-                    project = session.get("projectPath", "").replace(
-                        str(Path.home()), "~"
-                    )
-                    msg = f"⚡ Claude 응답 완료 [{project}]"
-                    subprocess.run(
-                        ["tmux", "display-message", "-t", tmux_session, msg],
-                        capture_output=True,
-                    )
-                    # 터미널 벨
-                    subprocess.run(
-                        ["tmux", "run-shell", f"printf '\\a'"],
-                        capture_output=True,
-                    )
-                    _log("INFO", f"응답 알림: {sid[:8]} [{project}]")
-                    notified = True
-
-        except Exception as e:
-            _log("ERROR", f"watcher 오류: {e}")
-
-        time.sleep(2)
-
-    _WATCHER_PID_FILE.unlink(missing_ok=True)
-    _log("INFO", "session watcher 종료")
-
 
 def run_tmux_layout() -> None:
     """tmux 레이아웃 실행.
@@ -2277,9 +2119,6 @@ def run_tmux_layout() -> None:
             f"YAZI_CONFIG_HOME={config_home} {yazi_bin}", "Enter",
         ])
     subprocess.run(["tmux", "select-pane", "-t", yazi_pane])
-
-    # 백그라운드 세션 응답 완료 watcher 시작
-    _start_session_watcher()
 
     if os.environ.get("TMUX"):
         subprocess.run(["tmux", "switch-client", "-t", tmux_session])
@@ -2405,7 +2244,6 @@ def main() -> None:
     parser.add_argument("--tmux-new-session-at", metavar="DIR", help=argparse.SUPPRESS)
     parser.add_argument("--preview-session", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--log", action="store_true", help="cs 로그 보기 (~/.cache/cs/cs.log)")
-    parser.add_argument("--session-watcher", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--build-cache", metavar="FILE", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
@@ -2443,9 +2281,6 @@ def main() -> None:
             print("로그 파일 없음")
         return
 
-    if args.session_watcher:
-        _run_session_watcher()
-        return
 
     if args.build_cache:
         sessions = load_all_sessions()
