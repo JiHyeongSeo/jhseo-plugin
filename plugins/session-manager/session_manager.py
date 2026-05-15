@@ -2406,6 +2406,7 @@ def main() -> None:
     parser.add_argument("--preview-session", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--log", action="store_true", help="cs 로그 보기 (~/.cache/cs/cs.log)")
     parser.add_argument("--session-watcher", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--build-cache", metavar="FILE", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/cs 심링크 설치"
@@ -2444,6 +2445,14 @@ def main() -> None:
 
     if args.session_watcher:
         _run_session_watcher()
+        return
+
+    if args.build_cache:
+        sessions = load_all_sessions()
+        sessions.sort(key=lambda s: s.get("modified", ""), reverse=True)
+        Path(args.build_cache).write_text(
+            json.dumps(sessions, ensure_ascii=False), encoding="utf-8"
+        )
         return
 
     # tmux 내부: fzf 브라우저 실행
