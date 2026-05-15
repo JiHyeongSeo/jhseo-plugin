@@ -364,11 +364,21 @@ def clean_summary(text: str) -> str:
 
 
 def _tty_input(prompt: str) -> str:
-    """입력 프롬프트. tmux popup 우선, 실패 시 /dev/tty fallback."""
+    """입력 프롬프트. /dev/tty 우선 (popup 안에서도 작동), 실패 시 tmux popup fallback."""
+    # /dev/tty 직접 사용 — fzf execute()에서도 작동
+    try:
+        with open("/dev/tty", "r") as tty_in, open("/dev/tty", "w") as tty_out:
+            tty_out.write(prompt)
+            tty_out.flush()
+            line = tty_in.readline()
+            return line.rstrip("\n\r")
+    except OSError:
+        pass
+
+    # fallback: tmux popup
     import tempfile as _tempfile
     tmp = Path(_tempfile.mkstemp(suffix=".cs-input.txt")[1])
     try:
-        # tmux popup: 플로팅 창에서 입력
         escaped = prompt.replace("'", "'\\''")
         subprocess.run(
             ["tmux", "display-popup", "-E",
@@ -463,6 +473,25 @@ def get_search_content(session: dict) -> str:
 
 
 _STATE_FILE = Path("/tmp/claude-browser-state.json")
+_LOG_FILE = Path.home() / ".cache" / "cs" / "cs.log"
+_LOG_MAX_BYTES = 2 * 1024 * 1024  # 2MB
+
+
+def _log(level: str, msg: str) -> None:
+    """간단한 파일 로거. ~/.cache/cs/cs.log 에 기록 (2MB 초과 시 .1로 회전)."""
+    try:
+        _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # 크기 초과 시 회전
+        if _LOG_FILE.exists() and _LOG_FILE.stat().st_size > _LOG_MAX_BYTES:
+            backup = _LOG_FILE.with_suffix(".log.1")
+            if backup.exists():
+                backup.unlink()
+            _LOG_FILE.rename(backup)
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with _LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(f"[{ts}] [{level}] {msg}\n")
+    except OSError:
+        pass
 
 
 def _read_state() -> dict:
@@ -524,13 +553,58 @@ def _find_bg_window_idx(session_id: str, tmux_session: str) -> str | None:
     return None
 
 
+def preview_session(session_id: str, sessions_cache_path: str = "") -> None:
+    """fzf preview용: 세션 메타데이터 + 최근 대화 내용 출력."""
+    sessions: list[dict] = []
+    if sessions_cache_path:
+        try:
+            sessions = json.loads(Path(sessions_cache_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    if not sessions:
+        sessions = load_all_sessions()
+
+    session = next((s for s in sessions if s.get("sessionId") == session_id), None)
+    if not session:
+        print(f"세션을 찾을 수 없습니다: {session_id}")
+        return
+
+    raw_path = session.get("projectPath", "?")
+    display_path = raw_path.replace(str(Path.home()), "~") if raw_path != "?" else "?"
+    modified = session.get("modified", "")[:19].replace("T", " ")
+    msg_count = session.get("messageCount", 0)
+    tool = session.get("tool", "claude")
+    branch = session.get("gitBranch", "")
+    summary = get_display_summary(session)
+
+    print(f"\x1b[36m프로젝트:\x1b[0m {display_path}")
+    print(f"\x1b[36m수정시각:\x1b[0m {modified}")
+    print(f"\x1b[36m메시지:\x1b[0m {msg_count}개  \x1b[36m도구:\x1b[0m {tool}", end="")
+    if branch:
+        print(f"  \x1b[36m브랜치:\x1b[0m {branch}", end="")
+    print()
+    print(f"\x1b[36m요약:\x1b[0m {summary}")
+    print(f"\x1b[90m{'─' * 60}\x1b[0m")
+
+    # 최근 대화 (마지막 N개)
+    full_path = session.get("fullPath", "")
+    if full_path:
+        text = extract_messages_for_summary(full_path, max_messages=30)
+        if text:
+            print(text)
+        else:
+            print("(대화 내용 없음)")
+
+
 def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
     """v3.0.0: yazi의 현재 디렉터리에서 새 세션을 우측 pane에서 시작.
 
     기존 우측 세션은 break-pane으로 background에 보존.
     """
     if not work_dir or not Path(work_dir).is_dir():
+        _log("WARN", f"new_session_at: 잘못된 경로 {work_dir}")
         return
+    _log("INFO", f"new_session_at: dir={work_dir} tool={tool or '(auto)'}")
 
     tmux_session = "claude-browser"
 
@@ -804,9 +878,27 @@ def format_session_line(
     slot_ids: set[str] | None = None,
     bg_ids: set[str] | None = None,
 ) -> str:
+    import unicodedata
+
+    def _vpad(s: str, width: int) -> str:
+        """한글=2, ASCII=1 가시 폭 기준 패딩/잘림."""
+        visual = 0
+        out = ""
+        for c in s:
+            cw = 2 if unicodedata.east_asian_width(c) in ("W", "F") else 1
+            if visual + cw > width:
+                break
+            out += c
+            visual += cw
+        if visual < width:
+            out += " " * (width - visual)
+        return out
+
     date = session.get("modified", "")[:10]
-    project = session.get("projectPath", "?").split("/")[-1]
-    summary = get_display_summary(session)[:60]
+    raw_path = session.get("projectPath", "?")
+    project = raw_path.replace(str(Path.home()), "~") if raw_path != "?" else "?"
+    project = _vpad(project, 40)
+    summary = _vpad(get_display_summary(session), 60)
     session_id = session.get("sessionId", "")
 
     if slot_ids and session_id in slot_ids:
@@ -821,7 +913,7 @@ def format_session_line(
         tool_badge = "\x1b[34m[G]\x1b[0m"
     else:
         tool_badge = "\x1b[36m[C]\x1b[0m"
-    display = f"{indicator}{tool_badge} {project}  {summary}"
+    display = f"{indicator}{tool_badge} {project} │ {summary}"
     # session_id는 Tab으로 분리 — fzf --with-nth=1 로 화면에서 숨김
     return f"{display}\t{session_id}"
 
@@ -1427,6 +1519,9 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     current_session_id = state.get("right_session_id", "")
     bg_sessions: dict = state.get("bg_sessions", {})
 
+    _log("INFO", f"split_open: target={session_id[:8]} right_pane={right_pane} "
+                  f"cur_session={current_session_id[:8] if current_session_id else '(none)'}")
+
     # 이미 열린 세션 → 포커스만
     if current_session_id == session_id and right_pane in _get_all_pane_ids(tmux_session):
         subprocess.run(["tmux", "set-option", "-p", "-t", right_pane, "@cs_title", pane_title])
@@ -1443,6 +1538,9 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
         ], capture_output=True)
         if r.returncode == 0:
             bg_sessions[current_session_id] = current_session_id
+            _log("INFO", f"break-pane: {current_session_id[:8]} → background")
+        else:
+            _log("ERROR", f"break-pane 실패: {r.stderr.decode()[:200]}")
         right_pane = ""
 
     # 너비 계산
@@ -1479,15 +1577,19 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     if not new_pane_id:
         live_panes = _get_all_pane_ids(tmux_session)
         if right_pane and right_pane in live_panes:
-            # right_pane 존재 → 그 자리에서 respawn
-            subprocess.run([
+            r = subprocess.run([
                 "tmux", "respawn-pane", "-k", "-t", right_pane,
                 "-c", work_dir, _resume_cmd(session),
-            ])
+            ], capture_output=True)
+            if r.returncode != 0:
+                _log("ERROR", f"respawn-pane 실패 rc={r.returncode}: {r.stderr.decode()[:200]}")
+            else:
+                _log("INFO", f"respawn-pane: right_pane={right_pane} session={session_id[:8]}")
             new_pane_id = right_pane
         else:
-            # right_pane 없음 → yazi 기준으로 새 분할
+            _log("WARN", f"right_pane 없음 → yazi에서 새 split (right_pane={right_pane})")
             if not yazi_pane or yazi_pane not in live_panes:
+                _log("ERROR", "yazi_pane 도 없음 → return")
                 return
             r = subprocess.run([
                 "tmux", "split-window", "-h", "-l", str(right_w),
@@ -1495,6 +1597,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
                 _resume_cmd(session),
             ], capture_output=True)
             if r.returncode != 0:
+                _log("ERROR", f"split-window 실패: {r.stderr.decode()[:200]}")
                 return
             new_pane_id = _get_active_pane_id(tmux_session)
 
@@ -1929,6 +2032,7 @@ def run_tmux_layout() -> None:
         sys.exit("tmux가 필요합니다. sudo apt install tmux")
 
     tmux_session = "claude-browser"
+    _log("INFO", f"cs 시작 v{VERSION}")
 
     # 이미 실행 중이면 재attach
     if subprocess.run(
@@ -2124,6 +2228,8 @@ def main() -> None:
     parser.add_argument("--tmux-split-add", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-new-session", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--tmux-new-session-at", metavar="DIR", help=argparse.SUPPRESS)
+    parser.add_argument("--preview-session", metavar="SESSION_ID", help=argparse.SUPPRESS)
+    parser.add_argument("--log", action="store_true", help="cs 로그 보기 (~/.cache/cs/cs.log)")
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/cs 심링크 설치"
@@ -2146,6 +2252,18 @@ def main() -> None:
 
     if args.tmux_new_session_at:
         tmux_new_session_at(args.tmux_new_session_at)
+        return
+
+    if args.preview_session:
+        preview_session(args.preview_session, args.sessions_cache or "")
+        return
+
+    if args.log:
+        if _LOG_FILE.exists():
+            print(f"로그 파일: {_LOG_FILE}\n")
+            print(_LOG_FILE.read_text(encoding="utf-8"))
+        else:
+            print("로그 파일 없음")
         return
 
     # tmux 내부: fzf 브라우저 실행
@@ -2301,11 +2419,14 @@ def main() -> None:
                 label = f"'{get_display_summary(targets[0])[:40]}'"
             else:
                 label = f"{len(targets)}개 세션"
+            _log("INFO", f"delete prompt: targets={[t.get('sessionId','')[:8] for t in targets]}")
             confirm = _tty_input(f"\n  삭제: {label} (y/N) ").strip().lower()
+            _log("INFO", f"delete confirm: {confirm!r}")
             if confirm == "y":
                 deleted_ids = {t.get("sessionId") for t in targets}
                 for t in targets:
                     delete_session(t)
+                    _log("INFO", f"delete: {t.get('sessionId','')[:8]}")
                 # 캐시 파일에서도 삭제 (stale 방지)
                 if args.sessions_cache:
                     try:
@@ -2329,7 +2450,9 @@ def main() -> None:
         summary = get_display_summary(target)
 
         if fzf_action_name == "edit-title":
+            _log("INFO", f"edit-title prompt: {fzf_session_id[:8]}")
             new_title = _tty_input(f"\n  새 제목 (현재: {summary[:40]}): ").strip()
+            _log("INFO", f"edit-title input: {new_title!r}")
             if new_title:
                 save_title_override(fzf_session_id, new_title)
                 # 캐시 파일에서도 제목 갱신 (stale 방지)
