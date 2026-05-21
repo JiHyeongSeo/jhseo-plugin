@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "3.0.1"
+VERSION = "3.1.0"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1187,14 +1187,151 @@ def _check_and_install_deps() -> None:
     if shutil.which("lazygit"):
         print("  ✓ lazygit")
     else:
-        print("  - lazygit 미설치 (선택: Ctrl+G git 현황)")
-        print("    설치: cs --install-lazygit")
+        print("  ✗ lazygit 없음 (Ctrl+G git TUI)")
+        _install_lazygit()
+
+    if shutil.which("delta"):
+        print("  ✓ delta (git diff side-by-side)")
+    else:
+        print("  ✗ delta 없음 (git diff/lazygit side-by-side)")
+        _install_delta()
 
     if shutil.which("yazi"):
         print("  ✓ yazi")
     else:
         print("  ✗ yazi 없음 (v3.0.0 필수 — 좌측 파일 브라우저 pane)")
         _install_yazi()
+
+
+def _install_delta() -> bool:
+    """git-delta 설치. apt 우선, 실패 시 GitHub 바이너리."""
+    import platform
+    import urllib.request
+    import tarfile as _tarfile
+
+    system = platform.system()
+    if system == "Linux" and shutil.which("apt"):
+        print("  → apt로 delta 설치 중...")
+        r = subprocess.run(["sudo", "apt", "install", "-y", "git-delta"], capture_output=True)
+        if r.returncode == 0 and shutil.which("delta"):
+            print("  ✓ delta 설치 완료 (apt)")
+            return True
+    elif system == "Darwin" and shutil.which("brew"):
+        print("  → brew로 delta 설치 중...")
+        r = subprocess.run(["brew", "install", "git-delta"], capture_output=True)
+        if r.returncode == 0 and shutil.which("delta"):
+            print("  ✓ delta 설치 완료 (brew)")
+            return True
+
+    # Fallback: GitHub 바이너리 (Linux x86_64)
+    if system != "Linux":
+        print("  ✗ 자동 설치 실패. https://github.com/dandavison/delta/releases 에서 직접 받으세요")
+        return False
+
+    bin_dir = Path.home() / ".local" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        print("  delta 최신 버전 확인 중...")
+        with urllib.request.urlopen(
+            "https://api.github.com/repos/dandavison/delta/releases/latest", timeout=10
+        ) as r:
+            version = json.loads(r.read()).get("tag_name", "")
+    except Exception as e:
+        print(f"  버전 확인 실패: {e}")
+        return False
+
+    url = (
+        f"https://github.com/dandavison/delta/releases/download/{version}/"
+        f"delta-{version}-x86_64-unknown-linux-musl.tar.gz"
+    )
+    tmp_tar = Path("/tmp/delta.tar.gz")
+    try:
+        print(f"  delta {version} 다운로드 중...")
+        urllib.request.urlretrieve(url, tmp_tar)
+        with _tarfile.open(tmp_tar) as tf:
+            for member in tf.getmembers():
+                if member.name.endswith("/delta"):
+                    member.name = "delta"
+                    tf.extract(member, bin_dir)
+                    os.chmod(bin_dir / "delta", 0o755)
+                    print(f"  ✓ delta {version} 설치 완료: {bin_dir / 'delta'}")
+                    return True
+        print("  delta 바이너리를 찾을 수 없습니다.")
+        return False
+    except Exception as e:
+        print(f"  설치 실패: {e}")
+        return False
+    finally:
+        tmp_tar.unlink(missing_ok=True)
+
+
+def _install_lazygit_configs() -> None:
+    """플러그인의 lazygit-config/ 를 ~/.config/lazygit/ 에 설치."""
+    src_dir = Path(__file__).resolve().parent / "lazygit-config"
+    if not src_dir.is_dir():
+        return
+    dst_dir = Path.home() / ".config" / "lazygit"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    backup_dir = dst_dir / ".cs-backup"
+    installed = []
+    for src_file in src_dir.iterdir():
+        if not src_file.is_file():
+            continue
+        dst_file = dst_dir / src_file.name
+        if dst_file.exists():
+            try:
+                if dst_file.read_bytes() == src_file.read_bytes():
+                    continue
+            except OSError:
+                pass
+            backup_dir.mkdir(exist_ok=True)
+            try:
+                (backup_dir / src_file.name).write_bytes(dst_file.read_bytes())
+            except OSError:
+                pass
+        try:
+            dst_file.write_bytes(src_file.read_bytes())
+            installed.append(src_file.name)
+        except OSError as e:
+            print(f"  lazygit config 설치 실패 {src_file.name}: {e}")
+
+    if installed:
+        print(f"  lazygit 설정 설치: {', '.join(installed)}")
+        if backup_dir.exists():
+            print(f"  기존 설정 백업: {backup_dir}")
+
+
+def _configure_git_delta() -> None:
+    """git 전역 설정에 delta pager 추가. 각 키 개별 검사 — 기존 값 있으면 보존."""
+    if not shutil.which("delta") or not shutil.which("git"):
+        return
+
+    pager_cmd = "delta --side-by-side --line-numbers"
+    settings = [
+        ("core.pager", pager_cmd),
+        ("interactive.diffFilter", "delta --color-only"),
+        ("delta.navigate", "true"),
+        ("delta.light", "false"),
+        ("delta.syntax-theme", "Nord"),
+    ]
+    applied = []
+    skipped = []
+    for key, value in settings:
+        existing = subprocess.run(
+            ["git", "config", "--global", "--get", key],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        if existing:
+            skipped.append(f"{key}={existing[:40]}")
+            continue
+        subprocess.run(["git", "config", "--global", key, value], capture_output=True)
+        applied.append(key)
+
+    if applied:
+        print(f"  ✓ git delta 설정 적용: {', '.join(applied)}")
+    if skipped:
+        print(f"  - 기존 git 설정 보존: {', '.join(skipped)}")
 
 
 def _install_lazygit() -> bool:
@@ -1414,7 +1551,9 @@ def install_cli() -> None:
         print(f'  ~/.zshrc 또는 ~/.bashrc에 추가: export PATH="$HOME/.local/bin:$PATH"')
 
     _install_yazi_configs()
+    _install_lazygit_configs()
     _check_and_install_deps()
+    _configure_git_delta()
 
 
 def _install_yazi_configs() -> None:
