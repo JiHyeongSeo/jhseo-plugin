@@ -1,6 +1,10 @@
-# gemini-sol
+# gemini-plugin-for-claude (SOL)
 
-SOL 팀용 Gemini CLI 연동 플러그인. [amurtare/gemini_plugin_for_claude](https://gitlab.nexon.com/amurtare/gemini_plugin_for_claude)에서 **동기 호출 기능만** 추출.
+SOL 팀용 Gemini CLI 연동 플러그인. [amurtare/gemini_plugin_for_claude](https://gitlab.nexon.com/amurtare/gemini_plugin_for_claude)에서 **동기 호출 기능만** 추출. 대칭 명칭의 [claude-plugin-for-gemini](../claude-plugin-for-gemini) (반대 방향: Gemini가 Claude 호출) 와 짝.
+
+- **방향**: Claude Code → Gemini CLI
+- **플러그인 이름**: `gemini-for-claude` (슬래시 prefix)
+- **마켓플레이스 등록 이름**: `gemini-for-claude`
 
 ## 왜 fork했나
 
@@ -15,9 +19,9 @@ SOL 팀 정책은 **동기 호출만** 사용. 그래서 필요한 것만 추출
 
 | 커맨드 | 설명 |
 |--------|------|
-| `/gemini:ask` | Gemini에게 질문 (read-only, 동기) |
-| `/gemini:review` | 코드 리뷰 (동기, foreground 강제) |
-| `/gemini:setup` | Gemini CLI 설치/인증 상태 확인 |
+| `/gemini-for-claude:ask` | Gemini에게 질문 (read-only, 동기) |
+| `/gemini-for-claude:review` | 코드 리뷰 (동기, foreground 강제) |
+| `/gemini-for-claude:setup` | Gemini CLI 설치/인증 상태 확인 |
 
 ## 요구사항
 
@@ -28,15 +32,15 @@ SOL 팀 정책은 **동기 호출만** 사용. 그래서 필요한 것만 추출
 ## 설치 (SOL 마켓플레이스에서)
 
 ```
-/plugin install gemini-sol@sol-plugins
+/plugin install gemini-for-claude@sol-plugins
 ```
 
 ## 사용 예
 
 ```
-/gemini:ask 이 알고리즘 더 효율적인 방법 있어?
-/gemini:review src/auth.py
-/gemini:setup
+/gemini-for-claude:ask 이 알고리즘 더 효율적인 방법 있어?
+/gemini-for-claude:review src/auth.py
+/gemini-for-claude:setup
 ```
 
 ## 원본과의 차이

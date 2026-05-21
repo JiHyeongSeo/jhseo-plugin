@@ -125,9 +125,9 @@
       "category": "productivity"
     },
     {
-      "name": "gemini-sol",
-      "source": "./plugins/gemini-sol",
-      "description": "Gemini CLI 동기 호출 (ask/review/setup). amurtare/gemini_plugin_for_claude 기반, SOL 팀 워크플로우용 필수 기능만 포함.",
+      "name": "gemini-for-claude",
+      "source": "./plugins/gemini-plugin-for-claude",
+      "description": "Gemini CLI 동기 호출 (ask/review/setup). amurtare/gemini_plugin_for_claude 기반, SOL 팀 워크플로우용 필수 기능만 포함. claude-plugin-for-gemini와 대칭 명칭.",
       "version": "0.1.0",
       "author": {
         "name": "SOL Team"
