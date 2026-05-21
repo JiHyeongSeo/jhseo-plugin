@@ -1,34 +1,139 @@
 {
-  "name": "jhseo-plugins",
+  "name": "sol-plugins",
   "owner": {
-    "name": "JiHyeong Seo",
-    "email": "seojihyeong@nexon.co.kr"
+    "name": "SOL Team",
+    "email": "sol@nexon.com"
   },
   "metadata": {
-    "description": "JiHyeong Seo의 개인 Claude Code 플러그인 모음"
+    "description": "SOL 팀 Claude Code 플러그인 모음",
+    "version": "1.0.0"
   },
   "plugins": [
     {
-      "name": "session-manager",
-      "source": "./plugins/session-manager",
-      "description": "Claude Code 세션 브라우저. 멀티슬롯 tmux 패널, fzf 검색, resume/삭제 관리",
-      "version": "2.0.3",
+      "name": "confluence",
+      "source": "./plugins/confluence",
+      "description": "Confluence 페이지 검색/조회/생성/수정. 유해탐지팀 컨플루언스 문서 관리용",
+      "version": "1.1.2",
       "author": {
-        "name": "JiHyeong Seo"
+        "name": "SOL Team"
       },
-      "keywords": ["session", "resume", "browser", "fzf", "tmux", "세션", "세션관리"],
+      "keywords": [
+        "confluence",
+        "documentation",
+        "wiki",
+        "컨플루언스",
+        "컨플",
+        "문서"
+      ],
       "category": "productivity"
     },
     {
-      "name": "trading-analyst",
-      "source": "./plugins/trading-analyst",
-      "description": "미국 주식 다중 에이전트 분석. /analyze <TICKER>로 BUY/HOLD/SELL 결론 도출",
+      "name": "sol",
+      "source": "./plugins/code-review",
+      "description": "AI 기반 심층 코드리뷰. 4개 카테고리 검토 + 선택한 이슈 자동 수정",
+      "version": "1.4.1",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": [
+        "code-review",
+        "git",
+        "security",
+        "performance",
+        "코드리뷰",
+        "auto-fix"
+      ],
+      "category": "development"
+    },
+    {
+      "name": "detection-log",
+      "source": "./plugins/detection-log",
+      "description": "Elasticsearch 탐지 로그 조회. 텍스트/이미지 탐지 API 호출 로그 검색 및 통계 분석",
+      "version": "1.0.6",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["elasticsearch", "detection", "log", "탐지", "로그", "통계"],
+      "category": "monitoring"
+    },
+    {
+      "name": "service-lookup",
+      "source": "./plugins/service-lookup",
+      "description": "서비스 ID 조회. NXLOG/BWS 서비스 ID를 게임명/메모로 검색",
+      "version": "1.0.3",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["service", "serviceid", "서비스", "게임", "lookup"],
+      "category": "utility"
+    },
+    {
+      "name": "d3js",
+      "source": "./plugins/claude-d3js-skill",
+      "description": "D3.js 데이터 시각화 라이브러리 플러그인화",
       "version": "1.0.0",
       "author": {
-        "name": "JiHyeong Seo"
+        "name": "SOL Team"
       },
-      "keywords": ["trading", "stock", "analysis", "finance", "미국주식", "주식분석"],
-      "category": "finance"
+      "keywords": [
+        "d3",
+        "d3js",
+        "visualization",
+        "chart",
+        "차트",
+        "시각화",
+        "데이터시각화"
+      ],
+      "category": "development"
+    },
+    {
+      "name": "dev-team",
+      "source": "./plugins/dev-team",
+      "description": "Builder + Validator Agent Teams 기반 개발 워크플로우. 스펙 작성 → TDD 구현 → 독립 검증 루프",
+      "version": "1.0.4",
+      "author": { "name": "SOL Team" },
+      "keywords": ["agent-teams", "builder", "validator", "dev-workflow", "tdd", "code-review"],
+      "category": "development"
+    },
+    {
+      "name": "notion",
+      "source": "./plugins/notion",
+      "description": "Notion 페이지 검색/조회/생성/수정. 유해탐지팀 노션 문서 관리용",
+      "version": "1.0.0",
+      "author": { "name": "SOL Team" },
+      "keywords": ["notion", "노션", "documentation", "문서", "배포", "회의록", "ADR"],
+      "category": "productivity"
+    },
+    {
+      "name": "drawio-notion",
+      "source": "./plugins/drawio-notion",
+      "description": "draw.io 다이어그램 생성 후 Notion embed 블록으로 자동 삽입. 외부 앱 설치 불필요",
+      "version": "1.1.0",
+      "author": { "name": "SOL Team" },
+      "keywords": ["drawio", "diagram", "notion", "다이어그램", "플로우차트", "아키텍처", "embed"],
+      "category": "productivity"
+    },
+    {
+      "name": "session-manager",
+      "source": "./plugins/session-manager",
+      "description": "AI 세션 브라우저. Claude/Gemini 세션 탐색, 멀티슬롯 tmux 패널, fzf 검색, resume/삭제 관리",
+      "version": "3.0.0",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["session", "resume", "browser", "fzf", "세션", "세션관리"],
+      "category": "productivity"
+    },
+    {
+      "name": "gemini-sol",
+      "source": "./plugins/gemini-sol",
+      "description": "Gemini CLI 동기 호출 (ask/review/setup). amurtare/gemini_plugin_for_claude 기반, SOL 팀 워크플로우용 필수 기능만 포함.",
+      "version": "0.1.0",
+      "author": {
+        "name": "SOL Team"
+      },
+      "keywords": ["gemini", "review", "collaboration", "ai", "리뷰"],
+      "category": "productivity"
     }
   ]
 }
