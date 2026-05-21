@@ -1,0 +1,16 @@
+{
+  "name": "gemini-sol",
+  "version": "0.1.0",
+  "description": "Gemini CLI를 Claude Code에서 동기 호출하는 SOL 팀 공용 플러그인. 코드 리뷰, 질의응답 협업용. amurtare/gemini_plugin_for_claude의 필수 기능만 추출.",
+  "author": {
+    "name": "SOL Team"
+  },
+  "homepage": "https://gitlab.nexon.com/da_div/SOL/claude-plugins",
+  "repository": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git",
+  "keywords": [
+    "gemini",
+    "review",
+    "collaboration",
+    "ai"
+  ]
+}
