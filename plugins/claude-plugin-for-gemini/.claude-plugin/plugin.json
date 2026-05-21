@@ -1,0 +1,8 @@
+{
+  "name": "claude-plugin-for-gemini",
+  "version": "1.0.0",
+  "description": "Claude Code를 호출하여 협업하는 플러그인",
+  "author": "seoji",
+  "entrypoint": "claude_executor.py",
+  "type": "skill"
+}

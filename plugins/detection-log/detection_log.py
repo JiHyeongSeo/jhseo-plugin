@@ -10,7 +10,14 @@ import sys
 import httpx
 
 ES_ENDPOINT = "https://apik.plex.nexon.io:5502"
-ES_INDEX = "engagement-api-http-access-log-*"
+
+ES_INDEX_MAP = {
+    "live": "engagement-api-http-access-log-*",
+    "stage": "stage-engagement-api-http-access-log-*",
+    "pre-stage": "pre-engagement-api-http-access-log-*",
+    "dev": "dev-engagement-api-http-access-log-*",
+}
+ES_INDEX = ES_INDEX_MAP["live"]
 ES_USER = os.getenv("ES_USER", "engagement-api-http-access-log-api")
 ES_PASSWORD = os.getenv("ES_PASSWORD")
 
@@ -23,6 +30,10 @@ REGION_PATH_PREFIX = {
     "singapore": "/inference/sin/",
     "frankfurt": "/inference/fra/",
 }
+
+
+def get_index(env=None):
+    return ES_INDEX_MAP.get(env, ES_INDEX) if env else ES_INDEX
 
 
 def get_auth():
@@ -70,9 +81,9 @@ def build_filters(args):
     return filters
 
 
-async def _es_post(client, body):
+async def _es_post(client, body, env=None):
     r = await client.post(
-        f"{ES_ENDPOINT}/{ES_INDEX}/_search",
+        f"{ES_ENDPOINT}/{get_index(env)}/_search",
         auth=get_auth(),
         json=body,
         headers={"Content-Type": "application/json"},
@@ -115,6 +126,18 @@ async def search_logs(args):
         if type_name:
             filters.append({"term": {f"stat.{type_name}.infer_detect": 0}})
 
+    score_min = getattr(args, "score_min", None)
+    score_max = getattr(args, "score_max", None)
+    if (score_min is not None or score_max is not None):
+        type_name = getattr(args, "type", None)
+        if type_name:
+            score_range = {}
+            if score_min is not None:
+                score_range["gte"] = score_min
+            if score_max is not None:
+                score_range["lte"] = score_max
+            filters.append({"range": {f"stat.{type_name}.infer_prediction": score_range}})
+
     sort_parts = args.sort.split(":")
     sort_field = sort_parts[0]
     sort_order = sort_parts[1] if len(sort_parts) > 1 else "desc"
@@ -130,11 +153,13 @@ async def search_logs(args):
         "sort": [{sort_field: {"order": sort_order}}],
     }
 
-    # --detected/--undetected + --type 사용 시 필요 필드만 요청 (출력량 대폭 감소)
+    # --detected/--undetected/--score-range + --type 사용 시 필요 필드만 요청 (출력량 대폭 감소)
     detected = getattr(args, "detected", False)
     undetected = getattr(args, "undetected", False)
+    score_min = getattr(args, "score_min", None)
+    score_max = getattr(args, "score_max", None)
     type_name = getattr(args, "type", None)
-    if (detected or undetected) and type_name:
+    if (detected or undetected or score_min is not None or score_max is not None) and type_name:
         body["_source"] = [
             "@timestamp",
             "request.body.serviceId",
@@ -156,8 +181,9 @@ async def search_logs(args):
             "stat",
         ]
 
+    env = getattr(args, "env", None)
     async with httpx.AsyncClient(verify=False) as client:
-        data, err = await _es_post(client, body)
+        data, err = await _es_post(client, body, env)
         if err:
             return err
         hits = data.get("hits", {}).get("hits", [])
@@ -189,6 +215,9 @@ async def search_logs(args):
                 "results": compact,
             }
 
+        score_min = getattr(args, "score_min", None)
+        score_max = getattr(args, "score_max", None)
+
         if undetected and type_name:
             compact = []
             for h in hits:
@@ -199,6 +228,36 @@ async def search_logs(args):
                 for i, text in enumerate(texts if isinstance(texts, list) else [texts]):
                     pred = preds[i] if isinstance(preds, list) and i < len(preds) else 0
                     items.append({"text": text, "prediction": round(pred, 4) if isinstance(pred, (int, float)) else pred})
+                if items:
+                    compact.append({
+                        "timestamp": src.get("@timestamp", ""),
+                        "service_id": _deep_get(src, "request.body.serviceId", ""),
+                        "texts": items,
+                    })
+            return {
+                "total": _total(data),
+                "returned": len(compact),
+                "results": compact,
+            }
+
+        if (score_min is not None or score_max is not None) and type_name:
+            compact = []
+            for h in hits:
+                src = h.get("_source", {})
+                texts = _deep_get(src, "request.body.data.text", [])
+                preds = _deep_get(src, f"stat.{type_name}.infer_prediction", [])
+                items = []
+                for i, text in enumerate(texts if isinstance(texts, list) else [texts]):
+                    pred = preds[i] if isinstance(preds, list) and i < len(preds) else 0
+                    if not isinstance(pred, (int, float)):
+                        continue
+                    in_range = True
+                    if score_min is not None and pred < score_min:
+                        in_range = False
+                    if score_max is not None and pred > score_max:
+                        in_range = False
+                    if in_range:
+                        items.append({"text": text, "prediction": round(pred, 4)})
                 if items:
                     compact.append({
                         "timestamp": src.get("@timestamp", ""),
@@ -234,8 +293,9 @@ async def stats_service(args):
         },
     }
 
+    env = getattr(args, "env", None)
     async with httpx.AsyncClient(verify=False) as client:
-        data, err = await _es_post(client, body)
+        data, err = await _es_post(client, body, env)
         if err:
             return err
         buckets = data.get("aggregations", {}).get("by_service", {}).get("buckets", [])
@@ -262,8 +322,9 @@ async def stats_type(args):
         },
     }
 
+    env = getattr(args, "env", None)
     async with httpx.AsyncClient(verify=False) as client:
-        data, err = await _es_post(client, body)
+        data, err = await _es_post(client, body, env)
         if err:
             return err
         buckets = data.get("aggregations", {}).get("by_type", {}).get("buckets", [])
@@ -315,8 +376,9 @@ async def stats_timeline(args):
         },
     }
 
+    env = getattr(args, "env", None)
     async with httpx.AsyncClient(verify=False) as client:
-        data, err = await _es_post(client, body)
+        data, err = await _es_post(client, body, env)
         if err:
             return err
         buckets = data.get("aggregations", {}).get("timeline", {}).get("buckets", [])
@@ -333,6 +395,8 @@ def _add_common_args(parser):
     parser.add_argument("--type")
     parser.add_argument("-r", "--region")
     parser.add_argument("-n", "--size", type=int, default=20)
+    parser.add_argument("--env", choices=["live", "stage", "pre-stage", "dev"], default=None,
+                        help="ES 인덱스 환경 (기본: live)")
 
 
 def main():
@@ -354,6 +418,10 @@ def main():
                    help="탐지된 로그만 필터 (--type 필수, stat.{type}.infer_detect > 0)")
     s.add_argument("--undetected", action="store_true",
                    help="미탐 로그만 필터 (--type 필수, stat.{type}.infer_detect == 0)")
+    s.add_argument("--score-min", dest="score_min", type=float,
+                   help="prediction 하한 필터 (예: 0.5)")
+    s.add_argument("--score-max", dest="score_max", type=float,
+                   help="prediction 상한 필터 (예: 0.79)")
 
     # stats
     st = sp.add_parser("stats")

@@ -2071,6 +2071,10 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session])
     # 마우스 활성화: 스크롤 시 copy mode 진입 (claude 대화 내용 스크롤 가능)
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "mouse", "on"])
+    # 스크롤백 버퍼 확장 (긴 Claude 대화 복사 시 짤림 방지)
+    subprocess.run(["tmux", "set-option", "-t", tmux_session, "history-limit", "100000"])
+    # 클립보드 복사 버퍼 크기 확장
+    subprocess.run(["tmux", "set-option", "-t", tmux_session, "buffer-limit", "100"])
     # pane 상단에 세션 제목 표시
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
