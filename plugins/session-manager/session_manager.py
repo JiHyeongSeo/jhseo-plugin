@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "3.0.0"
+VERSION = "3.0.1"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1193,8 +1193,8 @@ def _check_and_install_deps() -> None:
     if shutil.which("yazi"):
         print("  ✓ yazi")
     else:
-        print("  - yazi 미설치 (선택: Ctrl+E IDE 레이아웃)")
-        print("    설치: cs --install-yazi")
+        print("  ✗ yazi 없음 (v3.0.0 필수 — 좌측 파일 브라우저 pane)")
+        _install_yazi()
 
 
 def _install_lazygit() -> bool:
@@ -1278,14 +1278,18 @@ def _install_yazi() -> bool:
         print(f"  yazi {version} 다운로드 중...")
         with urllib.request.urlopen(url, timeout=60) as r:
             data = r.read()
+        installed = []
         with zipfile.ZipFile(_io.BytesIO(data)) as zf:
             for name in zf.namelist():
-                if name.endswith("/yazi") or name == "yazi":
-                    dest = bin_dir / "yazi"
+                base = name.rsplit("/", 1)[-1]
+                if base in ("yazi", "ya"):
+                    dest = bin_dir / base
                     dest.write_bytes(zf.read(name))
                     os.chmod(dest, 0o755)
-                    print(f"  ✓ yazi {version} 설치 완료: {dest}")
-                    return True
+                    installed.append(base)
+        if installed:
+            print(f"  ✓ yazi {version} 설치 완료: {', '.join(installed)} → {bin_dir}")
+            return True
         print("  yazi 바이너리를 찾을 수 없습니다.")
         return False
     except Exception as e:
