@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "3.1.0"
+VERSION = "3.2.0"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1201,6 +1201,98 @@ def _check_and_install_deps() -> None:
     else:
         print("  ✗ yazi 없음 (v3.0.0 필수 — 좌측 파일 브라우저 pane)")
         _install_yazi()
+
+    # bat: Ctrl+Shift+F 텍스트 검색 미리보기
+    if shutil.which("bat") or shutil.which("batcat"):
+        print("  ✓ bat (파일 미리보기)")
+        # Ubuntu batcat → bat symlink 보장
+        if not shutil.which("bat") and shutil.which("batcat"):
+            batcat_path = shutil.which("batcat")
+            if batcat_path:
+                bat_link = Path.home() / ".local" / "bin" / "bat"
+                if not bat_link.exists():
+                    bat_link.symlink_to(batcat_path)
+                    print(f"  ✓ bat symlink 생성 ({bat_link})")
+    else:
+        print("  ✗ bat 없음 (Ctrl+Shift+F 미리보기용)")
+        _install_via_apt_or_binary("bat", "sharkdp/bat", "bat")
+
+    # ripgrep: Ctrl+Shift+F 텍스트 검색
+    if shutil.which("rg"):
+        print("  ✓ ripgrep (텍스트 검색)")
+    else:
+        print("  ✗ ripgrep 없음 (Ctrl+Shift+F 텍스트 검색용)")
+        _install_via_apt_or_binary("ripgrep", "BurntSushi/ripgrep", "rg", apt_pkg="ripgrep")
+
+
+def _install_via_apt_or_binary(
+    display_name: str,
+    github_repo: str,
+    binary_name: str,
+    apt_pkg: str | None = None,
+) -> bool:
+    """apt 우선 설치, 실패 시 GitHub latest 바이너리 (Linux x86_64 musl)."""
+    import platform
+    import urllib.request
+    import tarfile as _tarfile
+
+    system = platform.system()
+    pkg = apt_pkg or display_name
+
+    if system == "Linux" and shutil.which("apt"):
+        print(f"  → apt로 {display_name} 설치 중...")
+        r = subprocess.run(["sudo", "apt", "install", "-y", pkg], capture_output=True)
+        if r.returncode == 0 and (shutil.which(binary_name) or shutil.which(f"{binary_name}cat")):
+            print(f"  ✓ {display_name} 설치 완료 (apt)")
+            return True
+    elif system == "Darwin" and shutil.which("brew"):
+        print(f"  → brew로 {display_name} 설치 중...")
+        r = subprocess.run(["brew", "install", pkg], capture_output=True)
+        if r.returncode == 0 and shutil.which(binary_name):
+            print(f"  ✓ {display_name} 설치 완료 (brew)")
+            return True
+
+    if system != "Linux":
+        print(f"  ✗ 자동 설치 실패. 수동 설치: https://github.com/{github_repo}/releases")
+        return False
+
+    bin_dir = Path.home() / ".local" / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        print(f"  {display_name} 최신 버전 확인 중...")
+        with urllib.request.urlopen(
+            f"https://api.github.com/repos/{github_repo}/releases/latest", timeout=10
+        ) as r:
+            ver = json.loads(r.read())["tag_name"]
+    except Exception as e:
+        print(f"  버전 확인 실패: {e}")
+        return False
+
+    # musl 바이너리 URL 패턴 시도
+    candidates = [
+        f"https://github.com/{github_repo}/releases/download/{ver}/{binary_name}-{ver}-x86_64-unknown-linux-musl.tar.gz",
+        f"https://github.com/{github_repo}/releases/download/{ver}/{binary_name}-{ver.lstrip('v')}-x86_64-unknown-linux-musl.tar.gz",
+    ]
+    tmp_tar = Path(f"/tmp/{binary_name}.tar.gz")
+    for url in candidates:
+        try:
+            print(f"  {display_name} {ver} 다운로드 중...")
+            urllib.request.urlretrieve(url, tmp_tar)
+            with _tarfile.open(tmp_tar) as tf:
+                for member in tf.getmembers():
+                    if member.name.endswith(f"/{binary_name}") or member.name == binary_name:
+                        member.name = binary_name
+                        tf.extract(member, bin_dir)
+                        os.chmod(bin_dir / binary_name, 0o755)
+                        print(f"  ✓ {display_name} {ver} 설치 완료: {bin_dir / binary_name}")
+                        return True
+        except Exception:
+            continue
+        finally:
+            tmp_tar.unlink(missing_ok=True)
+
+    print(f"  ✗ {display_name} 자동 설치 실패")
+    return False
 
 
 def _install_delta() -> bool:

@@ -161,3 +161,8 @@ desc = "비활성"
 on = ["<C-j>"]
 run = "shell '~/.config/yazi/cs-cd-jump.sh' --block"
 desc = "폴더 이동 (fzf)"
+
+[[mgr.prepend_keymap]]
+on = ["<C-S-f>"]
+run = "shell '~/.config/yazi/rg-search.sh' --block"
+desc = "파일 내 텍스트 검색 (ripgrep)"
