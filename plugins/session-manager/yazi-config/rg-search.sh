@@ -1,21 +1,25 @@
 #!/bin/bash
 # Ctrl+R: 파일 내 텍스트 검색 → 해당 라인에서 에디터로 열기
 
+RG_CMD="rg --line-number --no-heading --color=always --smart-case"
+
 selected=$(
-    rg --line-number --no-heading --color=always --smart-case '' 2>/dev/null \
-    | fzf --ansi --layout=reverse --border \
-          --prompt="텍스트 검색> " \
-          --delimiter=: \
-          --nth=3.. \
-          --preview='bat --color=always --highlight-line {2} {1} 2>/dev/null || cat {1}' \
-          --preview-window='right:50%:+{2}-5' \
-          </dev/tty
+    fzf --ansi --disabled --layout=reverse --border \
+        --prompt="텍스트 검색> " \
+        --delimiter=: \
+        --preview='bat --color=always --highlight-line {2} {1} 2>/dev/null || cat {1}' \
+        --preview-window='right:50%:+{2}-5' \
+        --bind "start:reload:$RG_CMD ''" \
+        --bind "change:reload:[ -n {q} ] && $RG_CMD {q} || $RG_CMD ''" \
+        </dev/tty
 )
 
 [ -z "$selected" ] && exit 0
 
-file=$(echo "$selected" | cut -d: -f1)
-line=$(echo "$selected" | cut -d: -f2)
+# ANSI 코드 제거 후 file:line 추출
+clean=$(echo "$selected" | sed 's/\x1b\[[0-9;]*m//g')
+file=$(echo "$clean" | cut -d: -f1)
+line=$(echo "$clean" | cut -d: -f2)
 abs=$(realpath "$file" 2>/dev/null)
 [ -z "$abs" ] && exit 0
 
