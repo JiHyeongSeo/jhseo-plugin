@@ -2609,8 +2609,12 @@ def run_tmux_layout() -> None:
     # 상태 초기화
     _STATE_FILE.write_text(json.dumps({"slots": [], "background": [], "bg_sessions": {}}), encoding="utf-8")
 
-    # tmux 세션 생성 (detached)
-    subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session])
+    # tmux 세션 생성 (detached) - 80x24 기본 크기로 시작하면 분할 비율이 왜곡되므로 현재 터미널 크기로 설정
+    cols, rows = shutil.get_terminal_size()
+    subprocess.run([
+        "tmux", "new-session", "-d", "-s", tmux_session,
+        "-x", str(cols), "-y", str(rows)
+    ])
     # 마우스 활성화: 스크롤 시 copy mode 진입 (claude 대화 내용 스크롤 가능)
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "mouse", "on"])
     # 스크롤백 버퍼 확장 (긴 Claude 대화 복사 시 짤림 방지)
