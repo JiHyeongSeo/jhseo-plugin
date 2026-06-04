@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -11,7 +12,7 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-VERSION = "3.2.0"
+VERSION = "3.3.0"
 SUMMARY_CACHE_DIR = Path.home() / ".claude" / "session-summaries"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -667,7 +668,7 @@ def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.50)
+    right_w = int(win_w * 0.65)
 
     if right_pane and right_pane in live_panes:
         # 빈 right_pane 재사용
@@ -1224,6 +1225,13 @@ def _check_and_install_deps() -> None:
         print("  ✗ ripgrep 없음 (Ctrl+Shift+F 텍스트 검색용)")
         _install_via_apt_or_binary("ripgrep", "BurntSushi/ripgrep", "rg", apt_pkg="ripgrep")
 
+    # tig: git 대시보드 graph 뷰 (없으면 git log --graph fallback)
+    if shutil.which("tig"):
+        print("  ✓ tig (git graph)")
+    else:
+        print("  - tig 없음 (git graph — 없으면 git log --graph로 동작)")
+        print("    더 나은 graph 원하면: sudo apt install tig")
+
 
 def _install_via_apt_or_binary(
     display_name: str,
@@ -1483,6 +1491,259 @@ def _find_git_repos(base_dir: str, max_depth: int = 3) -> list[str]:
         return []
 
 
+def collect_git_status(base_dir: str) -> str:
+    """base_dir 하위(depth 1~2) git repo 상태를 fzf용 탭 구분 라인 문자열로 반환."""
+    import unicodedata
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    _EXCLUDE_DIRS = {
+        "node_modules", ".venv", "venv", "__pycache__",
+        "miniconda3", "anaconda3", "site-packages",
+    }
+    _CACHE_FILE = Path("/tmp/cs-git-status-cache.json")
+
+    def _vpad_name(s: str, width: int) -> str:
+        """한글=2, ASCII=1 가시 폭 기준 패딩/잘림."""
+        visual = 0
+        out = ""
+        for c in s:
+            cw = 2 if unicodedata.east_asian_width(c) in ("W", "F") else 1
+            if visual + cw > width:
+                break
+            out += c
+            visual += cw
+        if visual < width:
+            out += " " * (width - visual)
+        return out
+
+    def _find_repos() -> list[str]:
+        """base_dir 자체 + depth 1 + depth 2 git repo 탐색 (제외 디렉터리 스킵)."""
+        base = Path(base_dir).resolve()
+        repos: list[str] = []
+
+        # base_dir 자체가 git repo
+        if (base / ".git").exists():
+            repos.append(str(base))
+
+        # depth 1 & 2
+        try:
+            cmd = ["find", str(base), "-mindepth", "1", "-maxdepth", "2",
+                   "-name", ".git",
+                   "!", "-path", "*/.git/.git"]
+            for excl in _EXCLUDE_DIRS:
+                cmd += ["!", "-path", f"*/{excl}/*"]
+            result = subprocess.run(
+                cmd,
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.strip().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                git_path = Path(line)
+                repo_path = git_path.parent if git_path.name == ".git" else git_path
+                # base 기준 상대경로에 숨김(.) 디렉터리 컴포넌트가 있으면 제외
+                try:
+                    rel_parts = repo_path.resolve().relative_to(base).parts
+                except ValueError:
+                    rel_parts = ()
+                if any(p.startswith(".") for p in rel_parts):
+                    continue
+                repo_str = str(repo_path.resolve())
+                if repo_str not in repos:
+                    repos.append(repo_str)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+        return repos
+
+    def _get_mtimes(repo: str) -> tuple[float, float]:
+        """(.git/HEAD mtime, .git/index mtime) 반환. 없으면 (-1, -1)."""
+        head = Path(repo) / ".git" / "HEAD"
+        index = Path(repo) / ".git" / "index"
+        try:
+            hm = head.stat().st_mtime if head.exists() else -1.0
+        except OSError:
+            hm = -1.0
+        try:
+            im = index.stat().st_mtime if index.exists() else -1.0
+        except OSError:
+            im = -1.0
+        return hm, im
+
+    def _collect_one(repo: str) -> str:
+        """단일 repo 상태 라인 생성."""
+        name = Path(repo).name
+
+        # 브랜치명
+        try:
+            br = subprocess.run(
+                ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+            )
+            branch = br.stdout.strip() if br.returncode == 0 else "detached"
+            if branch == "HEAD":
+                branch = "detached"
+        except (subprocess.TimeoutExpired, OSError):
+            branch = "detached"
+
+        # status --porcelain
+        modified = 0
+        untracked = 0
+        try:
+            st = subprocess.run(
+                ["git", "-C", repo, "status", "--porcelain"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if st.returncode == 0:
+                for ln in st.stdout.splitlines():
+                    if len(ln) < 2:
+                        continue
+                    xy = ln[:2]
+                    if xy == "??":
+                        untracked += 1
+                    else:
+                        modified += 1
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+        # ahead/behind
+        ahead = 0
+        behind = 0
+        no_remote = False
+        try:
+            ab = subprocess.run(
+                ["git", "-C", repo, "rev-list", "--count", "--left-right",
+                 "@{upstream}...HEAD"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if ab.returncode == 0:
+                parts = ab.stdout.strip().split()
+                if len(parts) == 2:
+                    behind = int(parts[0])
+                    ahead = int(parts[1])
+            else:
+                no_remote = True
+        except (subprocess.TimeoutExpired, OSError, ValueError):
+            no_remote = True
+
+        # conflict
+        conflict = False
+        try:
+            cf = subprocess.run(
+                ["git", "-C", repo, "ls-files", "-u"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if cf.returncode == 0 and cf.stdout.strip():
+                conflict = True
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+        # indicator
+        dirty = modified > 0 or untracked > 0
+        if conflict:
+            indicator = "\x1b[31m●\x1b[0m "
+        elif dirty:
+            indicator = "\x1b[33m●\x1b[0m "
+        else:
+            indicator = "\x1b[32m●\x1b[0m "
+
+        name_padded = _vpad_name(name, 28)
+        branch_part = f"\x1b[36m[{branch}]\x1b[0m"
+
+        if conflict:
+            status_part = "\x1b[31m[CONFLICT]\x1b[0m"
+        elif no_remote:
+            dirty_info = ""
+            if modified > 0:
+                dirty_info += f" M{modified}"
+            if untracked > 0:
+                dirty_info += f" ??{untracked}"
+            status_part = f"\x1b[90m[no-remote]\x1b[0m{dirty_info}"
+        else:
+            parts_list = []
+            if ahead > 0:
+                parts_list.append(f"↑{ahead}")
+            if behind > 0:
+                parts_list.append(f"↓{behind}")
+            if modified > 0:
+                parts_list.append(f"M{modified}")
+            if untracked > 0:
+                parts_list.append(f"??{untracked}")
+            status_part = " ".join(parts_list) if parts_list else "clean"
+
+        display = f"{indicator}{name_padded} {branch_part}  {status_part}"
+        return f"{display}\t{repo}"
+
+    # 캐시 로드
+    try:
+        cache: dict = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        cache = {}
+
+    repos = _find_repos()
+    if not repos:
+        return ""
+
+    results: list[tuple[str, str]] = []
+    new_cache: dict = {}
+
+    def _process_repo(repo: str) -> str:
+        git_dir = Path(repo) / ".git"
+        # .git이 파일인 경우(worktree/submodule) 캐시 스킵
+        if not git_dir.is_dir():
+            line = _collect_one(repo)
+            return line
+
+        hm, im = _get_mtimes(repo)
+        cached_entry = cache.get(repo, {})
+        if (
+            hm >= 0
+            and cached_entry.get("head_mtime") == hm
+            and cached_entry.get("index_mtime") == im
+            and cached_entry.get("line")
+        ):
+            return cached_entry["line"]
+
+        line = _collect_one(repo)
+        return line
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        future_to_repo = {executor.submit(_process_repo, r): r for r in repos}
+        for future in as_completed(future_to_repo):
+            repo = future_to_repo[future]
+            try:
+                line = future.result()
+            except Exception:
+                continue
+            results.append((repo, line))
+
+            # 캐시 갱신
+            git_dir = Path(repo) / ".git"
+            if git_dir.is_dir():
+                hm, im = _get_mtimes(repo)
+                if hm >= 0:
+                    new_cache[repo] = {
+                        "head_mtime": hm,
+                        "index_mtime": im,
+                        "line": line,
+                    }
+
+    # 저장된 캐시 + 새 항목 병합
+    merged_cache = {**cache, **new_cache}
+    try:
+        _CACHE_FILE.write_text(
+            json.dumps(merged_cache, ensure_ascii=False), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+    # repo 발견 순서대로 정렬 (결과는 as_completed 순서이므로 repo 기준 정렬)
+    repo_order = {r: i for i, r in enumerate(repos)}
+    results.sort(key=lambda x: repo_order.get(x[0], 9999))
+    return "\n".join(line for _, line in results)
+
+
 def _install_yazi() -> bool:
     """yazi 최신 버전을 ~/.local/bin/ 에 설치 (sudo 불필요)."""
     import urllib.request
@@ -1644,8 +1905,33 @@ def install_cli() -> None:
 
     _install_yazi_configs()
     _install_lazygit_configs()
+    _install_dashboard_scripts()
     _check_and_install_deps()
     _configure_git_delta()
+
+
+def _install_dashboard_scripts() -> None:
+    """플러그인의 cs-scripts/ 디렉터리를 ~/.config/cs/ 에 설치 (git 대시보드)."""
+    src_dir = Path(__file__).resolve().parent / "cs-scripts"
+    if not src_dir.is_dir():
+        return
+    dst_dir = Path.home() / ".config" / "cs"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    installed = []
+    for src_file in src_dir.iterdir():
+        if not src_file.is_file():
+            continue
+        dst_file = dst_dir / src_file.name
+        try:
+            dst_file.write_bytes(src_file.read_bytes())
+            if src_file.suffix == ".sh":
+                os.chmod(dst_file, 0o755)
+            installed.append(src_file.name)
+        except OSError as e:
+            print(f"  cs-script 설치 실패 {src_file.name}: {e}")
+    if installed:
+        print(f"  git 대시보드 스크립트 설치: {', '.join(sorted(installed))}")
 
 
 def _install_yazi_configs() -> None:
@@ -1728,6 +2014,20 @@ def _get_right_width(tmux_session: str) -> int:
         return 130
 
 
+def _dashboard_base(work_dir: str) -> str:
+    """대시보드 스캔 기준 디렉터리 계산.
+
+    - work_dir이 git repo면 → 부모 (형제 repo들 표시)
+    - work_dir이 repo가 아닌 컨테이너면 → work_dir 자체 (하위 repo들 표시)
+    """
+    if not work_dir:
+        return str(Path.home())
+    p = Path(work_dir)
+    if (p / ".git").exists():
+        return str(p.parent)
+    return str(p)
+
+
 def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     """Enter: 4-pane IDE 레이아웃에서 세션을 우측 Claude pane에서 실행.
 
@@ -1764,8 +2064,13 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
     _log("INFO", f"split_open: target={session_id[:8]} right_pane={right_pane} "
                   f"cur_session={current_session_id[:8] if current_session_id else '(none)'}")
 
-    # 이미 열린 세션 → 포커스만
+    # 이미 열린 세션 → 포커스만 (대시보드 디렉터리도 갱신)
     if current_session_id == session_id and right_pane in _get_all_pane_ids(tmux_session):
+        dash_base = _dashboard_base(work_dir)
+        try:
+            Path("/tmp/cs-dashboard-dir.txt").write_text(dash_base, encoding="utf-8")
+        except OSError:
+            pass
         subprocess.run(["tmux", "set-option", "-p", "-t", right_pane, "@cs_title", pane_title])
         subprocess.run(["tmux", "select-pane", "-t", right_pane])
         return
@@ -1799,7 +2104,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.50)
+    right_w = int(win_w * 0.65)
     yazi_pane = state.get("yazi_pane_id", "")
 
     new_pane_id = ""
@@ -1865,11 +2170,13 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
         write_dict["yazi_pane_id"] = yazi_pane
     _write_state(write_dict)
 
-    # yazi가 살아있으면 ya emit cd 로 해당 디렉터리로 이동 (재시작 없이)
-    if yazi_pane and yazi_pane in _get_all_pane_ids(tmux_session):
-        ya_bin = shutil.which("ya")
-        if ya_bin:
-            subprocess.run([ya_bin, "emit", "cd", work_dir], capture_output=True)
+    # 좌측 git 대시보드 스캔 디렉터리를 이 세션 프로젝트의 부모로 갱신.
+    # (대시보드 fzf는 세션 피커 종료 후 execute+reload 체인으로 이 파일을 다시 읽음)
+    dash_base = _dashboard_base(work_dir)
+    try:
+        Path("/tmp/cs-dashboard-dir.txt").write_text(dash_base, encoding="utf-8")
+    except OSError:
+        pass
 
     subprocess.run(["tmux", "select-pane", "-t", new_pane_id])
 
@@ -2322,7 +2629,7 @@ def run_tmux_layout() -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.50)  # Claude pane 60%
+    right_w = int(win_w * 0.65)  # Claude pane 60%
 
     yazi_pane = subprocess.run(
         ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0.0", "#{pane_id}"],
@@ -2349,14 +2656,22 @@ def run_tmux_layout() -> None:
         "background": [],
     }, ensure_ascii=False), encoding="utf-8")
 
-    # yazi 시작 (좌측 pane)
-    if shutil.which("yazi"):
-        yazi_bin = shutil.which("yazi")
+    # 좌측 pane: 멀티레포 git 대시보드 시작 (스캔 기준 = cs 실행 디렉터리)
+    dashboard = Path.home() / ".config" / "cs" / "cs-git-dashboard.sh"
+    launch_dir = os.getcwd()
+    if dashboard.exists():
+        subprocess.run([
+            "tmux", "send-keys", "-t", yazi_pane,
+            f"bash {dashboard} {shlex.quote(launch_dir)}", "Enter",
+        ])
+    elif shutil.which("yazi"):
+        # 대시보드 없으면 yazi fallback
         config_home = str(Path.home() / ".config" / "yazi")
         subprocess.run([
             "tmux", "send-keys", "-t", yazi_pane,
-            f"YAZI_CONFIG_HOME={config_home} {yazi_bin}", "Enter",
+            f"YAZI_CONFIG_HOME={config_home} {shutil.which('yazi')}", "Enter",
         ])
+    subprocess.run(["tmux", "set-option", "-p", "-t", yazi_pane, "@cs_title", "git"])
     subprocess.run(["tmux", "select-pane", "-t", yazi_pane])
 
     if os.environ.get("TMUX"):
@@ -2484,6 +2799,7 @@ def main() -> None:
     parser.add_argument("--preview-session", metavar="SESSION_ID", help=argparse.SUPPRESS)
     parser.add_argument("--log", action="store_true", help="cs 로그 보기 (~/.cache/cs/cs.log)")
     parser.add_argument("--build-cache", metavar="FILE", help=argparse.SUPPRESS)
+    parser.add_argument("--git-status", metavar="DIR", help=argparse.SUPPRESS)
     parser.add_argument(
         "action", nargs="?", default=None,
         help="install: ~/.local/bin/cs 심링크 설치"
@@ -2527,6 +2843,10 @@ def main() -> None:
         Path(args.build_cache).write_text(
             json.dumps(sessions, ensure_ascii=False), encoding="utf-8"
         )
+        return
+
+    if args.git_status:
+        print(collect_git_status(args.git_status))
         return
 
     # tmux 내부: fzf 브라우저 실행

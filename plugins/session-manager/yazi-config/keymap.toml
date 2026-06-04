@@ -1,34 +1,24 @@
-[[mgr.prepend_keymap]]
-on = ["<C-s>"]
-run = "shell '~/.config/yazi/cs-session-picker.sh' --block"
-desc = "Claude 세션 선택"
+# yazi는 cs 대시보드에서 Ctrl+E 팝업으로 실행됨.
+# 팝업이므로 세션 관리(Ctrl+S/N/Q/Z)는 대시보드 소관 → 여기선 제거.
+# 파일 탐색 기능(Ctrl+J/F/R)만 유지. q 로 팝업 닫기.
 
+# ── cs 파일 탐색 기능 ──────────────────────────────────────
 [[mgr.prepend_keymap]]
-on = ["<C-g>"]
-run = "shell 'tmux display-popup -E -h 90% -w 90% -d \"$PWD\" lazygit' --block"
-desc = "Lazygit (현재 디렉터리)"
-
-[[mgr.prepend_keymap]]
-on = ["<C-n>"]
-run = "shell '~/.config/yazi/cs-new-session.sh' --block"
-desc = "새 Claude 세션"
+on = ["<C-j>"]
+run = "shell '~/.config/yazi/cs-cd-jump.sh' --block"
+desc = "폴더 이동 (fzf)"
 
 [[mgr.prepend_keymap]]
 on = ["<C-f>"]
 run = "shell ~/.config/yazi/fzf-search.sh --block"
-desc = "fzf 파일 검색"
+desc = "fzf 파일명 검색"
 
 [[mgr.prepend_keymap]]
-on = ["<C-q>"]
-run = "shell 'tmux kill-session -t claude-browser' --block"
-desc = "cs 종료"
+on = ["<C-r>"]
+run = "shell '~/.config/yazi/rg-search.sh' --block"
+desc = "파일 내 텍스트 검색 (ripgrep)"
 
-[[mgr.prepend_keymap]]
-on = ["<C-z>"]
-run = "shell 'tmux detach-client' --block"
-desc = "tmux detach"
-
-# ── 비활성화 ───────────────────────────────────────────────
+# ── 불필요 키 비활성화 (실수 방지) ────────────────────────
 [[mgr.prepend_keymap]]
 on = ["/"]
 run = "escape"
@@ -64,54 +54,8 @@ on = ["Z"]
 run = "escape"
 desc = "비활성"
 
-# 탭 관련 비활성화
 [[mgr.prepend_keymap]]
 on = ["t"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["1"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["2"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["3"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["4"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["5"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["6"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["7"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["8"]
-run = "escape"
-desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["9"]
 run = "escape"
 desc = "비활성"
 
@@ -130,7 +74,6 @@ on = ["<Tab>"]
 run = "escape"
 desc = "비활성"
 
-# g/G 비활성화
 [[mgr.prepend_keymap]]
 on = ["g"]
 run = "escape"
@@ -141,12 +84,6 @@ on = ["G"]
 run = "escape"
 desc = "비활성"
 
-# 종료/명령 비활성화 (Ctrl+Q만 사용)
-[[mgr.prepend_keymap]]
-on = ["q"]
-run = "escape"
-desc = "비활성 (Ctrl+Q 사용)"
-
 [[mgr.prepend_keymap]]
 on = [";"]
 run = "escape"
@@ -156,13 +93,3 @@ desc = "비활성"
 on = [":"]
 run = "escape"
 desc = "비활성"
-
-[[mgr.prepend_keymap]]
-on = ["<C-j>"]
-run = "shell '~/.config/yazi/cs-cd-jump.sh' --block"
-desc = "폴더 이동 (fzf)"
-
-[[mgr.prepend_keymap]]
-on = ["<C-r>"]
-run = "shell '~/.config/yazi/rg-search.sh' --block"
-desc = "파일 내 텍스트 검색 (ripgrep)"
