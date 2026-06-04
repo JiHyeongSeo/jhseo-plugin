@@ -2003,13 +2003,13 @@ def _ask_target_slot(slots: list[dict], sessions: list[dict]) -> int | None:
 
 
 def _get_right_width(tmux_session: str) -> int:
-    """tmux 윈도우 너비의 60%를 절대값으로 반환."""
+    """tmux 윈도우 너비의 65%를 절대값으로 반환 (Claude pane 65%, 대시보드 35%)."""
     w_result = subprocess.run(
         ["tmux", "display-message", "-t", f"{tmux_session}:0", "-p", "#{window_width}"],
         capture_output=True, text=True,
     )
     try:
-        return max(60, int(int(w_result.stdout.strip()) * 0.70))
+        return max(60, int(int(w_result.stdout.strip()) * 0.65))
     except ValueError:
         return 130
 
@@ -2629,7 +2629,7 @@ def run_tmux_layout() -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.65)  # Claude pane 60%
+    right_w = int(win_w * 0.65)  # Claude 65%, 대시보드 35%
 
     yazi_pane = subprocess.run(
         ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0.0", "#{pane_id}"],
