@@ -2629,15 +2629,13 @@ def run_tmux_layout() -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.65)  # Claude 65%, 대시보드 35%
-
     yazi_pane = subprocess.run(
         ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0.0", "#{pane_id}"],
         capture_output=True, text=True,
     ).stdout.strip()
 
     r = subprocess.run(
-        ["tmux", "split-window", "-h", "-l", str(right_w), "-t", yazi_pane,
+        ["tmux", "split-window", "-h", "-l", "65%", "-t", yazi_pane,
          "-P", "-F", "#{pane_id}"],
         capture_output=True, text=True,
     )
