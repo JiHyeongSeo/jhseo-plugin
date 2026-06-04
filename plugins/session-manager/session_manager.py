@@ -2621,14 +2621,7 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
                     " #{@cs_title} "])
-    # ── 2-pane 레이아웃 (yazi + Claude) ───────────────────────────────────────
-    try:
-        win_w = int(subprocess.run(
-            ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0", "#{window_width}"],
-            capture_output=True, text=True,
-        ).stdout.strip())
-    except ValueError:
-        win_w = 220
+    # ── 2-pane 레이아웃: 대시보드(35%) | Claude(65%) ───────────────────────────
     yazi_pane = subprocess.run(
         ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0.0", "#{pane_id}"],
         capture_output=True, text=True,
