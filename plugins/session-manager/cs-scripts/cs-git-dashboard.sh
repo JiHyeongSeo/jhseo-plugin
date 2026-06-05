@@ -1,6 +1,5 @@
 #!/bin/bash
 # cs 멀티레포 git 대시보드 - 좌측 pane 메인 프로세스
-# 인자 1(선택): 초기 스캔 디렉터리
 CSDIR="$HOME/.config/cs"
 YAZIDIR="$HOME/.config/yazi"
 DIRFILE="/tmp/cs-dashboard-dir.txt"
@@ -20,13 +19,12 @@ while true; do
     | fzf --ansi --layout=reverse --border \
         --delimiter=$'\t' --with-nth=1 \
         --prompt="git> " \
-        --header="Enter/g:graph  d:diff  f:파일선택  b:브랜치  ^E:yazi  ^R:새로고침  ^S:세션  ^N:새세션  ^Q:종료" \
+        --header="Enter/g:graph+diff  d:전체diff  b:브랜치  ^E:yazi  ^R:새로고침  ^S:세션  ^N:새세션  ^Q:종료" \
         --preview="$CSDIR/cs-git-preview.sh {-1}" \
         --preview-window="down:55%:wrap:border-top" \
         --bind="enter:execute($POPUP $CSDIR/cs-git-graph.sh {-1})" \
         --bind="g:execute($POPUP $CSDIR/cs-git-graph.sh {-1})" \
         --bind="d:execute($POPUP $CSDIR/cs-git-diff.sh {-1})" \
-        --bind="f:execute($POPUP $CSDIR/cs-git-files.sh {-1})" \
         --bind="b:execute($POPUP_SM $CSDIR/cs-git-branch.sh {-1})" \
         --bind="start:reload($STATUS)" \
         --bind="ctrl-r:reload($STATUS)" \
