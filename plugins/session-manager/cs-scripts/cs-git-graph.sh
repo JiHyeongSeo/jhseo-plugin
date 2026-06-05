@@ -8,7 +8,7 @@ repo="$1"
 git -C "$repo" log --oneline --graph --all --decorate --color=always 2>/dev/null \
 | fzf --ansi --no-sort --layout=reverse --border \
     --prompt="graph> " \
-    --header="Enter:커밋 diff  Esc:닫기" \
+    --header="Enter:커밋 diff  q/Esc:닫기" \
     --preview="
         commit=\$(echo {} | grep -oE '[a-f0-9]{7,}' | head -1)
         if [ -n \"\$commit\" ]; then
@@ -19,6 +19,7 @@ git -C "$repo" log --oneline --graph --all --decorate --color=always 2>/dev/null
         fi
     " \
     --preview-window="right:60%:wrap" \
+    --bind="q:abort" \
     --bind="enter:execute(
         commit=\$(echo {} | grep -oE '[a-f0-9]{7,}' | head -1)
         [ -n \"\$commit\" ] && git -C '$repo' show \"\$commit\" \
