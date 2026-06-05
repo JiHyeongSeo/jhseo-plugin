@@ -1,13 +1,13 @@
 #!/bin/bash
-# Ctrl+J: fzf로 폴더 선택 후 yazi 이동만 (세션 생성 X)
+# Ctrl+J: fzf로 폴더 선택 후 yazi 이동
+# ya emit cd는 nested popup에서 불안정 → YAZI_CWD 파일 경유 방식 사용
 CACHE="/tmp/claude-browser-cache.json"
-RESULT="/tmp/cs-cd-jump-result.txt"
 LIST="/tmp/cs-jumpdirs.txt"
-YAZI_DIR="$(pwd)"
+RESULT="/tmp/cs-cd-jump-result.txt"
 rm -f "$RESULT"
 
 {
-    echo "$YAZI_DIR"
+    echo "$PWD"
     if [ -f "$CACHE" ]; then
         python3 -c "
 import json
@@ -26,13 +26,10 @@ except Exception:
         ! -path '*/.*' ! -path '*/node_modules/*' ! -path '*/__pycache__/*' 2>/dev/null
 } | awk '!seen[$0]++' > "$LIST"
 
-tmux display-popup -E -h 80% -w 80% -- bash -c "
-    fzf --prompt='폴더 이동: ' --reverse --border \
-        --header='Enter:이동  Esc:취소' \
-        < '$LIST' > '$RESULT'
-"
+DIR=$(fzf --prompt='폴더 이동: ' --reverse --border \
+    --header='Enter:이동  Esc:취소' < "$LIST")
 
-if [ -s "$RESULT" ]; then
-    DIR=$(cat "$RESULT")
-    [ -d "$DIR" ] && ya emit cd "$DIR" 2>/dev/null
+if [ -n "$DIR" ] && [ -d "$DIR" ]; then
+    # ya emit cd로 현재 yazi 인스턴스에 cd 신호
+    ya emit cd "$DIR" 2>/dev/null || true
 fi
