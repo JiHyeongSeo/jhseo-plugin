@@ -699,7 +699,13 @@ def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
         "background": list(bg_sessions.keys()),
     })
 
-    # yazi 디렉터리 이동은 호출 스크립트에서 `ya emit cd` 로 처리 (yazi --block 회피)
+    # 대시보드 스캔 디렉터리 갱신 (dashboard +reload로 반영)
+    dash_base = _dashboard_base(work_dir)
+    try:
+        Path("/tmp/cs-dashboard-dir.txt").write_text(dash_base, encoding="utf-8")
+    except OSError:
+        pass
+
     subprocess.run(["tmux", "select-pane", "-t", new_pane])
 
 
