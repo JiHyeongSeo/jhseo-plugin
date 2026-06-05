@@ -12,7 +12,7 @@ _reload() {
 
 _reload | fzf --ansi --no-sort --layout=reverse --border \
     --prompt="graph> " \
-    --header="Enter:diff  f:fetch  c:checkout  n:new  d:delete  p:push  r:rebase  m:merge  q:닫기" \
+    --header="Enter:diff  f:fetch  c:checkout  n:new  d:delete  p:push  P:force-push  r:rebase  m:merge  q:닫기" \
     --preview="
         commit=\$(echo {} | grep -oE '[a-f0-9]{7,}' | head -1)
         if [ -n \"\$commit\" ]; then
@@ -34,4 +34,5 @@ _reload | fzf --ansi --no-sort --layout=reverse --border \
     --bind="p:execute(bash '$OPS' push '$repo')+reload(git -C '$repo' log --oneline --graph --all --decorate --color=always)" \
     --bind="r:execute(bash '$OPS' rebase '$repo')+reload(git -C '$repo' log --oneline --graph --all --decorate --color=always)" \
     --bind="m:execute(bash '$OPS' merge '$repo')+reload(git -C '$repo' log --oneline --graph --all --decorate --color=always)" \
+    --bind="P:execute(bash '$OPS' push '$repo' '' '' --force)+reload(git -C '$repo' log --oneline --graph --all --decorate --color=always)" \
     --bind="q:abort"

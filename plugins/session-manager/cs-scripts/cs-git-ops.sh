@@ -100,20 +100,29 @@ delete)
     ;;
 
 push)
+    force_flag=""
+    if [ "${4}" = "--force" ]; then
+        force_flag="--force-with-lease"
+        _msg "⚠ Force push 모드 (--force-with-lease)"
+    fi
     sels=$(_local_refs | fzf --layout=reverse --border --multi \
-        --prompt="push> " \
+        --prompt="${force_flag:+[FORCE] }push> " \
         --header="Tab:다중선택  Enter:push  q/Esc:취소" \
         --bind="q:abort")
     [ -z "$sels" ] && exit 0
+    if [ -n "$force_flag" ]; then
+        read -r -p "Force push하시겠습니까? (y/N) " yn
+        [ "$yn" != "y" ] && [ "$yn" != "Y" ] && exit 0
+    fi
     while IFS= read -r line; do
         if echo "$line" | grep -q '^\[브랜치\]'; then
             br=$(echo "$line" | sed 's/^\[브랜치\] //')
-            _msg "Pushing branch '$br'..."
-            git -C "$repo" push --set-upstream origin "$br" 2>&1
+            _msg "Pushing branch '$br' ${force_flag}..."
+            git -C "$repo" push --set-upstream origin "$br" $force_flag 2>&1
         elif echo "$line" | grep -q '^\[태그\]'; then
             tg=$(echo "$line" | sed 's/^\[태그\] //')
             _msg "Pushing tag '$tg'..."
-            git -C "$repo" push origin "$tg" 2>&1
+            git -C "$repo" push origin "$tg" $force_flag 2>&1
         fi
     done <<< "$sels"
     _ok "push 완료"
