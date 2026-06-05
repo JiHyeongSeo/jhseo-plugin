@@ -1,0 +1,93 @@
+<h2>오른쪽 패널 레이아웃</h2>
+<p class="subtitle">멀티슬롯 시 오른쪽 영역이 어떻게 구성되는지 확인해주세요</p>
+
+<div class="split" style="gap:24px;align-items:flex-start">
+
+  <!-- 현재 -->
+  <div style="flex:1">
+    <p class="label">현재 (1슬롯 고정)</p>
+    <div class="mockup" style="min-height:300px">
+      <div class="mockup-header">claude-browser (tmux)</div>
+      <div class="mockup-body" style="display:flex;gap:0;padding:0;height:260px">
+        <div style="flex:0 0 30%;background:#1a1a2e;border-right:2px solid #333;padding:12px;display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">세션 검색&gt;</div>
+          <div style="background:#2a2a4a;padding:6px 8px;border-radius:4px;font-size:11px;color:#4eff91">● 2024-01-15 &nbsp;clean-chatbot</div>
+          <div style="padding:6px 8px;font-size:11px;color:#aaa">2024-01-14 &nbsp;claude-plugins</div>
+          <div style="padding:6px 8px;font-size:11px;color:#aaa">2024-01-13 &nbsp;textdetect</div>
+          <div style="padding:6px 8px;font-size:11px;color:#aaa">2024-01-12 &nbsp;textdetect</div>
+        </div>
+        <div style="flex:1;background:#0d1117;padding:12px;display:flex;flex-direction:column">
+          <div style="font-size:11px;color:#4eff91;margin-bottom:8px">● clean-chatbot (claude --resume)</div>
+          <div style="flex:1;font-size:11px;color:#888;line-height:1.8">
+            > 오늘 할 일은 뭔가요?<br>
+            <span style="color:#aaa">로깅 개선 작업을 진행하겠습니다...</span><br>
+            > 좋아요, 시작해봐요
+          </div>
+          <div style="font-size:11px;color:#555;border-top:1px solid #222;padding-top:8px">claude-code $</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2슬롯 -->
+  <div style="flex:1">
+    <p class="label">멀티슬롯 (2슬롯 예시)</p>
+    <div class="mockup" style="min-height:300px">
+      <div class="mockup-header">claude-browser (tmux)</div>
+      <div class="mockup-body" style="display:flex;gap:0;padding:0;height:260px">
+        <div style="flex:0 0 30%;background:#1a1a2e;border-right:2px solid #333;padding:12px;display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">세션 검색&gt;</div>
+          <div style="background:#2a2a4a;padding:6px 8px;border-radius:4px;font-size:11px;color:#4eff91">● 2024-01-15 &nbsp;clean-chatbot</div>
+          <div style="padding:6px 8px;font-size:11px;color:#4eff91">● 2024-01-14 &nbsp;claude-plugins</div>
+          <div style="padding:6px 8px;font-size:11px;color:#ffcc00">● 2024-01-13 &nbsp;textdetect</div>
+          <div style="padding:6px 8px;font-size:11px;color:#aaa">2024-01-12 &nbsp;textdetect</div>
+        </div>
+        <div style="flex:1;background:#0d1117;display:flex;flex-direction:column">
+          <!-- 슬롯 1 (위) -->
+          <div style="flex:1;padding:10px;border-bottom:2px solid #333;display:flex;flex-direction:column">
+            <div style="font-size:11px;color:#4eff91;margin-bottom:6px">● clean-chatbot</div>
+            <div style="flex:1;font-size:10px;color:#888;line-height:1.7">
+              > 오늘 할 일은?<br>
+              <span style="color:#aaa">로깅 개선 작업...</span>
+            </div>
+            <div style="font-size:10px;color:#555;border-top:1px solid #222;padding-top:4px">$</div>
+          </div>
+          <!-- 슬롯 2 (아래) -->
+          <div style="flex:1;padding:10px;display:flex;flex-direction:column">
+            <div style="font-size:11px;color:#4eff91;margin-bottom:6px">● claude-plugins</div>
+            <div style="flex:1;font-size:10px;color:#888;line-height:1.7">
+              > session manager 멀티슬롯<br>
+              <span style="color:#aaa">설계 시작할까요?</span>
+            </div>
+            <div style="font-size:10px;color:#555;border-top:1px solid #222;padding-top:4px">$</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:#888;margin-top:8px">
+      🟢 초록 = 슬롯에 열린 세션 &nbsp;|&nbsp; 🟡 노랑 = 백그라운드 세션
+    </p>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:24px">
+  <h3>슬롯 방향</h3>
+  <p class="subtitle">오른쪽 패널을 어떻게 분할할까요?</p>
+  <div class="options">
+    <div class="option" data-choice="vertical" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>세로 분할 (위/아래)</h3>
+        <p>위 예시처럼 오른쪽 패널을 위아래로 나눔. 터미널 특성상 가로 공간을 최대한 활용 가능.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="flexible" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>방향 선택 가능</h3>
+        <p>Ctrl+S = 세로 분할, Ctrl+V = 가로 분할. 유연하지만 UX가 복잡해짐.</p>
+      </div>
+    </div>
+  </div>
+</div>
