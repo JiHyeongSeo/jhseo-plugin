@@ -101,7 +101,7 @@ delete)
 
 push)
     force_flag=""
-    if [ "${4}" = "--force" ]; then
+    if [ "${@: -1}" = "--force" ]; then
         force_flag="--force-with-lease"
         _msg "⚠ Force push 모드 (--force-with-lease)"
     fi
