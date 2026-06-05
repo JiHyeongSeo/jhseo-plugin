@@ -26,5 +26,5 @@ old=$(mktemp --suffix=".${ext}")
 new=$(mktemp --suffix=".${ext}")
 git -C "$repo" show "${commit}^:${sel}" > "$old" 2>/dev/null || true
 git -C "$repo" show "${commit}:${sel}"  > "$new" 2>/dev/null || true
-git diff --no-index -- "$old" "$new" | delta --side-by-side --line-numbers --paging=always
+git diff --no-index -U999999 -- "$old" "$new" | delta --side-by-side --line-numbers --paging=always
 rm -f "$old" "$new"
