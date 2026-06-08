@@ -668,7 +668,7 @@ def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.65)
+    right_w = int(win_w * 0.70)
 
     if right_pane and right_pane in live_panes:
         # 빈 right_pane 재사용
@@ -2009,15 +2009,15 @@ def _ask_target_slot(slots: list[dict], sessions: list[dict]) -> int | None:
 
 
 def _get_right_width(tmux_session: str) -> int:
-    """tmux 윈도우 너비의 65%를 절대값으로 반환 (Claude pane 65%, 대시보드 35%)."""
+    """tmux 윈도우 너비의 70%를 절대값으로 반환 (Claude pane 70%, 대시보드 30%)."""
     w_result = subprocess.run(
         ["tmux", "display-message", "-t", f"{tmux_session}:0", "-p", "#{window_width}"],
         capture_output=True, text=True,
     )
     try:
-        return max(60, int(int(w_result.stdout.strip()) * 0.65))
+        return max(60, int(int(w_result.stdout.strip()) * 0.70))
     except ValueError:
-        return 130
+        return 140
 
 
 def _dashboard_base(work_dir: str) -> str:
@@ -2110,7 +2110,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.65)
+    right_w = int(win_w * 0.70)
     yazi_pane = state.get("yazi_pane_id", "")
 
     new_pane_id = ""
