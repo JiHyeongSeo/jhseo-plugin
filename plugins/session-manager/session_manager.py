@@ -2631,14 +2631,14 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
                     " #{@cs_title} "])
-    # ── 2-pane 레이아웃: 대시보드(35%) | Claude(65%) ───────────────────────────
+    # ── 2-pane 레이아웃: 대시보드(30%) | Claude(70%) ───────────────────────────
     yazi_pane = subprocess.run(
         ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0.0", "#{pane_id}"],
         capture_output=True, text=True,
     ).stdout.strip()
 
     r = subprocess.run(
-        ["tmux", "split-window", "-h", "-l", "65%", "-t", yazi_pane,
+        ["tmux", "split-window", "-h", "-l", "70%", "-t", yazi_pane,
          "-P", "-F", "#{pane_id}"],
         capture_output=True, text=True,
     )
