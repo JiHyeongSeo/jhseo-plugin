@@ -668,7 +668,7 @@ def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.70)
+    right_w = int(win_w * 0.80)
 
     if right_pane and right_pane in live_panes:
         # 빈 right_pane 재사용
@@ -2009,13 +2009,13 @@ def _ask_target_slot(slots: list[dict], sessions: list[dict]) -> int | None:
 
 
 def _get_right_width(tmux_session: str) -> int:
-    """tmux 윈도우 너비의 70%를 절대값으로 반환 (Claude pane 70%, 대시보드 30%)."""
+    """tmux 윈도우 너비의 80%를 절대값으로 반환 (Claude pane 80%, 대시보드 20%)."""
     w_result = subprocess.run(
         ["tmux", "display-message", "-t", f"{tmux_session}:0", "-p", "#{window_width}"],
         capture_output=True, text=True,
     )
     try:
-        return max(60, int(int(w_result.stdout.strip()) * 0.70))
+        return max(60, int(int(w_result.stdout.strip()) * 0.80))
     except ValueError:
         return 140
 
@@ -2110,7 +2110,7 @@ def tmux_split_open(session_id: str, sessions_cache_path: str) -> None:
         ).stdout.strip())
     except ValueError:
         win_w = 220
-    right_w = int(win_w * 0.70)
+    right_w = int(win_w * 0.80)
     yazi_pane = state.get("yazi_pane_id", "")
 
     new_pane_id = ""
@@ -2631,14 +2631,14 @@ def run_tmux_layout() -> None:
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-t", tmux_session, "pane-border-format",
                     " #{@cs_title} "])
-    # ── 2-pane 레이아웃: 대시보드(30%) | Claude(70%) ───────────────────────────
+    # ── 2-pane 레이아웃: 대시보드(20%) | Claude(80%) ───────────────────────────
     yazi_pane = subprocess.run(
         ["tmux", "display-message", "-p", "-t", f"{tmux_session}:0.0", "#{pane_id}"],
         capture_output=True, text=True,
     ).stdout.strip()
 
     r = subprocess.run(
-        ["tmux", "split-window", "-h", "-l", "70%", "-t", yazi_pane,
+        ["tmux", "split-window", "-h", "-l", "80%", "-t", yazi_pane,
          "-P", "-F", "#{pane_id}"],
         capture_output=True, text=True,
     )
