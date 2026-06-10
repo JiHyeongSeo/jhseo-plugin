@@ -7,8 +7,10 @@ commit="$2"
 [ -z "$repo" ] || [ -z "$commit" ] && exit 0
 
 if [ "$commit" = "WIP" ]; then
-    # 미커밋 변경사항 (staged + unstaged vs HEAD)
-    files=$(git -C "$repo" diff HEAD --name-only 2>/dev/null)
+    # tracked 변경 + untracked 신규 파일
+    tracked=$(git -C "$repo" diff HEAD --name-only 2>/dev/null)
+    untracked=$(git -C "$repo" ls-files --others --exclude-standard 2>/dev/null | sed 's/^/[NEW] /')
+    files=$(printf "%s\n%s" "$tracked" "$untracked" | grep -v '^$')
     if [ -z "$files" ]; then
         echo "미커밋 변경사항이 없습니다"
         sleep 1.5
@@ -17,17 +19,33 @@ if [ "$commit" = "WIP" ]; then
     while true; do
         sel=$(echo "$files" | fzf --layout=reverse --border \
             --prompt="파일 선택 (WIP)> " \
-            --header="Enter:전체 좌우 diff  q/Esc:닫기" \
-            --preview="git -C '$repo' diff HEAD -- {} 2>/dev/null | delta --side-by-side --width \$FZF_PREVIEW_COLUMNS" \
+            --header="[NEW]=신규파일  Enter:전체 diff  q/Esc:닫기" \
+            --preview="
+                f=\$(echo {} | sed 's/^\[NEW\] //')
+                if echo {} | grep -q '^\[NEW\]'; then
+                    git -C '$repo' diff --no-index -- /dev/null '$repo'/\"\$f\" 2>/dev/null \
+                    | delta --side-by-side --width \"\${FZF_PREVIEW_COLUMNS:-80}\" 2>/dev/null
+                else
+                    git -C '$repo' diff HEAD -- \"\$f\" 2>/dev/null \
+                    | delta --side-by-side --width \"\${FZF_PREVIEW_COLUMNS:-80}\" 2>/dev/null
+                fi
+            " \
             --preview-window="right:60%:wrap" \
             --bind="q:abort")
         [ -z "$sel" ] && break
 
-        ext="${sel##*.}"
-        old=$(mktemp --suffix=".${ext}")
-        git -C "$repo" show "HEAD:${sel}" > "$old" 2>/dev/null || true
-        git diff --no-index -U999999 -- "$old" "$repo/$sel" | delta --side-by-side --line-numbers --paging=always
-        rm -f "$old"
+        if echo "$sel" | grep -q '^\[NEW\]'; then
+            actual=$(echo "$sel" | sed 's/^\[NEW\] //')
+            git diff --no-index -U999999 -- /dev/null "$repo/$actual" \
+            | delta --side-by-side --line-numbers --paging=always
+        else
+            ext="${sel##*.}"
+            old=$(mktemp --suffix=".${ext}")
+            git -C "$repo" show "HEAD:${sel}" > "$old" 2>/dev/null || true
+            git diff --no-index -U999999 -- "$old" "$repo/$sel" \
+            | delta --side-by-side --line-numbers --paging=always
+            rm -f "$old"
+        fi
     done
     exit 0
 fi
