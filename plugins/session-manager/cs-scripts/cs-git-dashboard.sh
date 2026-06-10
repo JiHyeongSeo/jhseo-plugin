@@ -19,13 +19,12 @@ while true; do
     | fzf --ansi --layout=reverse --border \
         --delimiter=$'\t' --with-nth=1 \
         --prompt="git> " \
-        --header="Enter/g:graph+diff  b:브랜치  ^E:yazi  ^S:세션  ^N:새세션  ^Q:종료" \
+        --header="Enter/g:graph+diff  ^E:yazi  ^S:세션  ^N:새세션  ^Q:종료" \
         --preview="$CSDIR/cs-git-preview.sh {-1}" \
         --preview-window="down:55%:wrap:border-top" \
         --bind="enter:execute($POPUP $CSDIR/cs-git-graph.sh {-1})" \
         --bind="g:execute($POPUP $CSDIR/cs-git-graph.sh {-1})" \
         --bind="d:execute($POPUP $CSDIR/cs-git-diff.sh {-1})" \
-        --bind="b:execute($POPUP_SM $CSDIR/cs-git-branch.sh {-1})" \
         --bind="start:reload($STATUS)" \
         --bind="ctrl-e:execute($POPUP -d {-1} 'YAZI_CONFIG_HOME=$YAZIDIR yazi')" \
         --bind="ctrl-s:execute($YAZIDIR/cs-session-picker.sh)+reload($STATUS)" \
