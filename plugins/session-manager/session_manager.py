@@ -304,6 +304,96 @@ def load_gemini_sessions() -> list[dict]:
     return sessions
 
 
+def _cursor_slug_to_path(slug: str) -> str:
+    """cursor project slug → 절대경로 복원 (best-effort).
+    예: home-seoji-inference → /home/seoji/inference
+    디렉토리 이름에 '-' 포함 시 greedy 매칭으로 탐색.
+    """
+    parts = slug.split("-")
+
+    def _search(parts: list[str], prefix: str) -> str:
+        if not parts:
+            return prefix
+        # 가능한 부분 중 가장 긴 것부터 시도
+        for i in range(len(parts), 0, -1):
+            candidate = prefix + "/" + "-".join(parts[:i])
+            if Path(candidate).is_dir():
+                result = _search(parts[i:], candidate)
+                if result:
+                    return result
+        return ""
+
+    result = _search(parts, "")
+    return result or ("/" + "/".join(parts))
+
+
+def load_cursor_sessions() -> list[dict]:
+    """~/.cursor/projects/*/agent-transcripts/<chatId>/<chatId>.jsonl 에서 Cursor Agent 세션 로드."""
+    if not shutil.which("agent"):
+        return []
+    cursor_projects = Path.home() / ".cursor" / "projects"
+    if not cursor_projects.exists():
+        return []
+
+    overrides = load_title_overrides()
+    sessions = []
+    for proj_dir in cursor_projects.iterdir():
+        if not proj_dir.is_dir():
+            continue
+        transcripts_dir = proj_dir / "agent-transcripts"
+        if not transcripts_dir.exists():
+            continue
+        project_path = _cursor_slug_to_path(proj_dir.name)
+
+        for chat_dir in transcripts_dir.iterdir():
+            if not chat_dir.is_dir():
+                continue
+            chat_id = chat_dir.name
+            jsonl = chat_dir / f"{chat_id}.jsonl"
+            if not jsonl.exists():
+                continue
+            try:
+                mtime = jsonl.stat().st_mtime
+                first_line = jsonl.read_text(encoding="utf-8", errors="replace").split("\n")[0]
+                data = json.loads(first_line)
+                content = data.get("message", {}).get("content", [])
+                first_prompt = ""
+                timestamp_str = ""
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text = item["text"]
+                        import re as _re
+                        m = _re.search(r"<user_query>\s*(.*?)\s*</user_query>", text, _re.DOTALL)
+                        if m:
+                            first_prompt = m.group(1).strip()[:200]
+                        m2 = _re.search(r"<timestamp>(.*?)</timestamp>", text)
+                        if m2:
+                            timestamp_str = m2.group(1).strip()
+                        break
+                from datetime import datetime as _dt
+                try:
+                    modified = _dt.fromtimestamp(mtime).astimezone().isoformat()
+                except Exception:
+                    modified = ""
+                summary = overrides.get(chat_id) or first_prompt[:60] or "Cursor session"
+                sessions.append({
+                    "sessionId": chat_id,
+                    "tool": "cursor",
+                    "projectPath": project_path,
+                    "fullPath": str(jsonl),
+                    "summary": summary,
+                    "firstPrompt": first_prompt,
+                    "messageCount": 0,
+                    "created": timestamp_str,
+                    "modified": modified,
+                    "gitBranch": "",
+                })
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                pass
+    sessions.sort(key=lambda s: s.get("modified", ""), reverse=True)
+    return sessions
+
+
 def load_all_sessions() -> list[dict]:
     """~/.claude/projects/ 아래 모든 세션을 반환."""
     sessions = []
@@ -343,6 +433,7 @@ def load_all_sessions() -> list[dict]:
                 s["summary"] = overrides[sid]
 
     sessions += load_gemini_sessions()
+    sessions += load_cursor_sessions()
     return sessions
 
 
@@ -623,6 +714,8 @@ def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
             avail.append(("Claude", "claude"))
         if shutil.which("gemini"):
             avail.append(("Gemini", "gemini"))
+        if shutil.which("agent"):
+            avail.append(("Cursor Agent", "agent"))
         if shutil.which("codex"):
             avail.append(("Codex", "codex"))
         if not avail:
@@ -670,11 +763,13 @@ def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
         win_w = 220
     right_w = int(win_w * 0.80)
 
+    tool_argv = ["agent", "--workspace", work_dir] if tool == "agent" else [tool]
+
     if right_pane and right_pane in live_panes:
         # 빈 right_pane 재사용
         subprocess.run([
             "tmux", "respawn-pane", "-k", "-t", right_pane,
-            "-c", work_dir, tool,
+            "-c", work_dir, *tool_argv,
         ])
         new_pane = right_pane
     else:
@@ -683,7 +778,7 @@ def tmux_new_session_at(work_dir: str, tool: str = "") -> None:
         r = subprocess.run([
             "tmux", "split-window", "-h", "-l", str(right_w),
             "-P", "-F", "#{pane_id}",
-            "-t", yazi_pane, "-c", work_dir, tool,
+            "-t", yazi_pane, "-c", work_dir, *tool_argv,
         ], capture_output=True, text=True)
         new_pane = r.stdout.strip()
         if not new_pane:
@@ -925,6 +1020,8 @@ def format_session_line(
     tool = session.get("tool", "claude")
     if tool == "gemini":
         tool_badge = "\x1b[34m[G]\x1b[0m"
+    elif tool == "cursor":
+        tool_badge = "\x1b[35m[A]\x1b[0m"
     else:
         tool_badge = "\x1b[36m[C]\x1b[0m"
     display = f"{indicator}{tool_badge} {project} │ {summary}"
@@ -994,6 +1091,10 @@ def _resume_cmd(session: dict) -> str:
     session_id = session.get("sessionId", "")
     if session.get("tool") == "gemini":
         return f"gemini --resume {session_id}"
+    if session.get("tool") == "cursor":
+        project_path = session.get("projectPath", "")
+        workspace_arg = f" --workspace {project_path}" if project_path and Path(project_path).is_dir() else ""
+        return f"agent --resume {session_id}{workspace_arg}"
     return f"claude --resume {session_id}"
 
 
