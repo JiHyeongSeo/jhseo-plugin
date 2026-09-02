@@ -51,8 +51,8 @@ if [[ -n "${1:-}" && -d "$1/.cursor" ]]; then
   SLUG="$(echo "$PROJ" | sed 's|^/||; s|/|-|g')"
   mkdir -p "$DEST/projects/$SLUG"
   rm -rf "$DEST/projects/$SLUG/.cursor"
-  cp -a "$PROJ/.cursor" "$DEST/projects/$SLUG/.cursor"
-  echo "  + project .cursor from $PROJ"
+  cp -aL "$PROJ/.cursor" "$DEST/projects/$SLUG/.cursor"
+  echo "  + project .cursor from $PROJ (symlinks resolved)"
 fi
 
 echo ""
