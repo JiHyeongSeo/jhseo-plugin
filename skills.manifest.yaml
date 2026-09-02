@@ -1,0 +1,17 @@
+# Personal skills to reinstall on a new machine (npx skills add)
+# Run: ./scripts/install-skills.sh
+
+cursor:
+  - repo: mattpocock/skills
+    all: true
+  - repo: https://github.com/Leonxlnx/taste-skill
+    skills:
+      - design-taste-frontend
+      - minimalist-ui
+      - redesign-existing-projects
+
+# Project-level rules (copy templates/rules into each repo's .cursor/rules/)
+templates_rules:
+  - karpathy-guidelines.mdc
+  - ponytail.mdc
+  - taste-dashboard.mdc

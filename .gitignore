@@ -1,1 +1,12 @@
+# backup run artifacts (optional local overrides)
+*.local.json
+*.secret
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# python (legacy)
 __pycache__/

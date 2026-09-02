@@ -1,114 +1,64 @@
-# SOL Team AI Agent Plugins (Claude Code & Gemini CLI)
+# jhseo-cursor-backup
 
-SOL 팀에서 사용하는 AI Agent (Claude Code, Gemini CLI) 플러그인 모음입니다.
+개인 **Cursor** 설정 백업·복구용 레포입니다.  
+(예전 SOL Team Claude/Gemini 플러그인 모노레포는 정리됨 — `archive/README.md` 참고)
 
-## 🚀 Gemini CLI 설치 방법
+## 무엇을 백업하나
 
-Gemini CLI에서는 이 레포지토리를 로컬에 클론한 뒤, 내부의 스킬 폴더들을 직접 설치하는 방식으로 사용합니다.
+| 경로 (Linux) | 내용 |
+|--------------|------|
+| `~/.config/Cursor/User/settings.json` | IDE 설정 |
+| `~/.config/Cursor/User/keybindings.json` | 단축키 |
+| `~/.config/Cursor/User/snippets/` | 스니펫 |
+| `~/.cursor/cli-config.json` | Agent CLI 설정 |
+| `~/.cursor/mcp.json` | MCP 서버 (있을 때) |
+| `~/.cursor/hooks.json`, `hooks/` | 훅 (있을 때) |
+| `~/.cursor/rules/` | **전역** User Rules |
+| `home/projects/<slug>/.cursor/` | (선택) 프로젝트별 rules/skills |
 
-### 1. 레포지토리 클론
-```bash
-git clone https://gitlab.nexon.com/da_div/SOL/claude-plugins.git ~/workspace/claude-plugins
-```
+**백업하지 않음:** `~/.cursor/projects/` (채팅 기록), `skills-cursor/` (Cursor 내장), extensions, 캐시.
 
-### 2. 전체 스킬 설치하기
-
-**옵션 A: 한 번에 설치 (One-liner)**
-클론 받은 폴더로 이동한 후 아래 명령어를 실행하면 모든 플러그인이 `user` 스코프(전역)로 일괄 설치됩니다.
-```bash
-cd ~/workspace/claude-plugins && for d in plugins/*/; do gemini skills install "$d" --scope user; done
-```
-
-**옵션 B: 개별 설치 (한 줄씩)**
-원하는 스킬만 선택해서 설치하거나 일괄 명령어가 동작하지 않는 환경이라면, 클론 받은 폴더 내에서 아래 명령어를 하나씩 실행하세요.
-```bash
-cd ~/workspace/claude-plugins
-gemini skills install ./plugins/claude-d3js-skill --scope user
-gemini skills install ./plugins/code-review --scope user
-gemini skills install ./plugins/confluence --scope user
-gemini skills install ./plugins/detection-log --scope user
-gemini skills install ./plugins/service-lookup --scope user
-```
-
-*(설치 후 Gemini CLI 내에서 `/skills reload` 명령어를 입력하면 즉시 적용됩니다.)*
-
----
-
-## 🤖 Claude Code 설치 방법
-
-### 1. 마켓플레이스 추가
+## 빠른 사용
 
 ```bash
-/plugin marketplace add https://gitlab.nexon.com/da_div/SOL/claude-plugins.git
+cd ~/jhseo-plugin
+
+# 이 PC → 레포
+./scripts/backup.sh
+./scripts/backup.sh ~/stock          # stock 프로젝트 .cursor 도 포함
+
+git add home/ && git commit -m "backup cursor settings"
+git push
+
+# 새 PC / 복구
+git clone git@github.com:JiHyeongSeo/jhseo-plugin.git
+cd jhseo-plugin
+./scripts/restore.sh
+./scripts/install-skills.sh ~/my-project   # Matt Pocock + Taste + template rules
 ```
 
-또는 SSH:
+## 스킬 재설치
+
+`skills.manifest.yaml` 에 정의:
+
+- **mattpocock/skills** (전체)
+- **taste-skill** (design-taste-frontend, minimalist-ui, redesign-existing-projects)
+
+프로젝트 공통 규칙 템플릿: `templates/rules/` (Karpathy, Ponytail, taste-dashboard)
+
+## 새 프로젝트에 규칙 복사
+
 ```bash
-/plugin marketplace add git@gitlab.nexon.com:da_div/SOL/claude-plugins.git
+mkdir -p ~/myapp/.cursor/rules
+cp templates/rules/*.mdc ~/myapp/.cursor/rules/
 ```
 
-### 2. 플러그인 설치
+## 주의
 
-```bash
-/plugin install <플러그인명>@sol-plugins
-```
+- API 키·토큰은 **커밋하지 마세요**. `.env`는 백업 대상 아님.
+- `cli-config.json`에 민감 정보가 있으면 `home/.cursor/cli-config.json` 을 검토 후 커밋.
+- 복구 후 **Cursor IDE / CLI 재시작** 필요.
 
-또는 `/plugin` 명령어로 플러그인 목록을 탐색하여 설치할 수도 있습니다.
+## 레거시
 
-## 프로젝트에서 마켓플레이스 자동 등록
-
-프로젝트의 `.claude/settings.json`에 추가하면, 팀원들이 마켓플레이스 URL을 직접 입력하지 않아도 됩니다:
-
-```json
-{
-  "extraKnownMarketplaces": {
-    "sol-plugins": {
-      "source": {
-        "source": "url",
-        "url": "https://gitlab.nexon.com/da_div/SOL/claude-plugins.git"
-      }
-    }
-  }
-}
-```
-
-이후 플러그인 설치:
-```bash
-/plugin install <플러그인명>@sol-plugins
-```
-
-또는 `/plugin` 명령어로 플러그인 목록을 탐색하여 설치할 수도 있습니다.
-
----
-
-## 포함된 플러그인
-
-### confluence
-
-Confluence 페이지를 검색, 조회, 생성, 수정하는 플러그인입니다.
-
-**설치:**
-```bash
-/plugin install confluence@sol-plugins
-```
-
-**환경 설정:**
-```bash
-export CONFLUENCE_API_TOKEN="your-bearer-token"
-```
-
-**기능:**
-- 페이지 검색 (트리 구조로 결과 표시)
-- 페이지 조회/생성/수정
-- 유해탐지팀 컨플루언스 문서 전용
-
-**사용 예시:**
-- "컨플에서 텍스트탐지 API 문서 검색해줘"
-- "배포 노트 작성해줘"
-- `/confluence:search 텍스트탐지`
-
----
-
-## 기여하기
-
-새 플러그인을 추가하려면 `plugins/` 폴더에 플러그인을 만들고 `.claude-plugin/marketplace.json`에 등록하세요.
+Claude Code / Gemini CLI 플러그인은 `git` 히스토리 또는 `legacy/sol-plugins` 브랜치(생성한 경우)에서 복구.

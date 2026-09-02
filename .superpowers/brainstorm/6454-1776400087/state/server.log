@@ -1,8 +1,0 @@
-{"type":"server-started","port":50688,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:50688","screen_dir":"/home/seoji/local/claude-plugins/.superpowers/brainstorm/6454-1776400087/content","state_dir":"/home/seoji/local/claude-plugins/.superpowers/brainstorm/6454-1776400087/state"}
-{"type":"screen-added","file":"/home/seoji/local/claude-plugins/.superpowers/brainstorm/6454-1776400087/content/layout-options.html"}
-{"source":"user-event","type":"click","text":"B\n      \n        방향 선택 가능\n        Ctrl+S = 세로 분할, Ctrl+V = 가로 분할. 유연하지만 UX가 복잡해짐.","choice":"flexible","id":null,"timestamp":1776400229556}
-{"source":"user-event","type":"click","text":"B\n      \n        방향 선택 가능\n        Ctrl+S = 세로 분할, Ctrl+V = 가로 분할. 유연하지만 UX가 복잡해짐.","choice":"flexible","id":null,"timestamp":1776400233561}
-{"type":"screen-added","file":"/home/seoji/local/claude-plugins/.superpowers/brainstorm/6454-1776400087/content/slot-picker.html"}
-{"type":"screen-added","file":"/home/seoji/local/claude-plugins/.superpowers/brainstorm/6454-1776400087/content/workflow.html"}
-{"type":"screen-added","file":"/home/seoji/local/claude-plugins/.superpowers/brainstorm/6454-1776400087/content/split-direction.html"}
-{"type":"server-stopped","reason":"idle timeout"}

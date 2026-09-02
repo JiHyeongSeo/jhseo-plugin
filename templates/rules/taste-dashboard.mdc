@@ -1,0 +1,19 @@
+---
+description: Editorial minimalist UI for the stock dashboard (Taste / minimalist-ui)
+globs: app/static/**,app/templates/**
+alwaysApply: false
+---
+
+# Dashboard UI
+
+Financial data tool — calm, editorial, Notion/Linear-like (not generic blue SaaS).
+
+- Warm bone canvas `#F7F6F3`, white surfaces, borders `#EAEAEA`
+- Headings: Newsreader serif; body: IBM Plex Sans KR; numbers: tabular + IBM Plex Mono
+- Flat cards: 1px border, 8–10px radius, no heavy shadows
+- Primary actions: near-black `#111`, not bright blue fills
+- Buy/sell: muted pastels (pale green/red backgrounds), not neon
+- Dense tables: generous row padding, clear hierarchy, hover `#F3F2EF`
+- Korean UI copy; no emoji icons
+
+When redesigning, prefer CSS token changes over new JS unless layout requires it.
